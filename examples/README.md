@@ -2,9 +2,6 @@
 
 ![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png " The Gopher Neural logo ")
 
-(TODO(abresk): deprecated: this repository provides )
-This repository provides examples to gopher-neural. You can find the code here: https://github.com/breskos/gopher-learn
-
 ## Sonar
 
 Basic example that uses the engine of gopher-neural to train a small neural network with basic parameters. More information in sonar ReadMe file. Data from: https://archive.ics.uci.edu/ml/datasets/Connectionist+Bench+%28Sonar%2C+Mines+vs.+Rocks%29
