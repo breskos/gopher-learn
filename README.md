@@ -2,17 +2,17 @@
 
 ![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png " The Gopher Neural logo ")
 
-# Quickstart
+## Quickstart
 
 - See examples here: https://github.com/breskos/gopher-learn/tree/master/examples
 
-# What is gopher-learn?
+## What is gopher-learn?
 
 - Artificial neural network written in Golang with training / testing framework
 - Rich measurement mechanisms to control the training
 - Examples for fast understanding
 
-# Install
+## Install
 
 ```
   go get github.com/breskos/gopher-learn
@@ -22,20 +22,13 @@
   go get github.com/breskos/gopher-learn/evaluation
 ```
 
-# The gopher-learn engine
+## The gopher-learn engine
 
-- number of #try (tries)
-
-  - learningRate minus decay if not 0 continue
-    - num of #epochs the network sees the training set
-
-- one epoch = one forward pass and one backward pass of all the training examples
-
-learningRate = <number>
-n x epoch
-then learningRate - decay
-
-epochs per learning-decay
+The engine helps you with optimizing the learning process.
+Basically it starts with a high learning rate to make fast progress in the beginning.
+After some rounds of learning (epochs) the learning rate declines (decay).
+During the process the best network is saved.
+After engine finished training you receive the ready to go network.
 
 ## Modes
 
@@ -120,9 +113,9 @@ e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, de
 ...
 ```
 
-# Some more basics
+## Some more basics
 
-## Train a network using engine
+### Train a network using engine
 
 ```go
 import (
@@ -177,7 +170,7 @@ func main() {
 
 ```
 
-## Create simple network for classification
+### Create simple network for classification
 
 ```go
 
