@@ -8,8 +8,6 @@
 
 # What is gopher-learn?
 
-(deprecated)
-
 - Artificial neural network written in Golang with training / testing framework
 - Rich measurement mechanisms to control the training
 - Examples for fast understanding
@@ -24,7 +22,7 @@
   go get github.com/breskos/gopher-learn/evaluation
 ```
 
-# gophers engine
+# The gopher-learn engine
 
 - number of #try (tries)
 
@@ -57,7 +55,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(engine.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -90,7 +88,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(engine.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -118,7 +116,7 @@ To let the engine decide for the best model, a few criterias were implemented. T
 ```go
 ...
 e := engine.NewEngine(neural.Classification, []int{100}, data)
-e.Start(engine.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 ...
 ```
 
@@ -155,7 +153,7 @@ func main() {
 	}
 	e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 	e.SetVerbose(true)
-	e.Start(engine.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+	e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 	network, evaluation := e.GetWinner()
 
 	evaluation.GetSummary("name of class1")
