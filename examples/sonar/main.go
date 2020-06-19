@@ -12,6 +12,7 @@ import (
 const (
 	dataFile      = "data.csv"
 	networkFile   = "network.json"
+	dataSetFile   = "set.json"
 	tries         = 1
 	epochs        = 100
 	trainingSplit = 0.7
@@ -34,6 +35,10 @@ func main() {
 	fmt.Println()
 	evaluation.GetSummary("M")
 
+	err = persist.SetToFile(dataSetFile, data)
+	if err != nil {
+		fmt.Printf("error while saving data set: %v\n", err)
+	}
 	err = persist.ToFile(networkFile, network)
 	if err != nil {
 		fmt.Printf("error while saving network: %v\n", err)
@@ -43,6 +48,11 @@ func main() {
 	if err != nil {
 		fmt.Printf("error while loading network: %v\n", err)
 	}
+	data2, err := persist.SetFromFile(dataSetFile)
+	if err != nil {
+		fmt.Printf("error while loading data set from file: %v\n", err)
+	}
+	fmt.Printf("data2: %v", data2)
 
 	w := network2.CalculateWinnerLabel(data.Samples[0].Vector)
 	fmt.Printf("%v -> %v\n", data.Samples[0].Label, w)

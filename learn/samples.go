@@ -4,6 +4,8 @@ package learn
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"os"
@@ -11,10 +13,16 @@ import (
 	"strings"
 )
 
+const (
+	hashSeperator = "#"
+)
+
 // Sample holds the sample data, value is just used for regression annotation
 type Sample struct {
 	Vector      []float64
 	Output      []float64
+	VectorHash  string
+	OutputHash  string
 	Label       string
 	ClassNumber int
 	Value       float64
@@ -38,6 +46,39 @@ func splitSamples(set *Set, ratio float64) (Set, Set) {
 		}
 	}
 	return firstSet, secondSet
+}
+
+func (s *Sample) updateHashes() {
+	text := ""
+	for k, v := range s.Vector {
+		text += fmt.Sprintf("%v:%v;", k, v)
+	}
+	s.VectorHash = calculateHash(text)
+	text = ""
+	for k, v := range s.Label {
+		text += fmt.Sprintf("%v:%v;", k, v)
+	}
+	s.OutputHash = calculateHash(text)
+}
+
+func (s *Sample) getVectorHash() string {
+	return s.VectorHash
+}
+
+func (s *Sample) getOutputHash() string {
+	return s.OutputHash
+}
+
+func (s *Sample) getOverallHash() string {
+	if s.OutputHash == "" || s.VectorHash == "" {
+		s.updateHashes()
+	}
+	return s.VectorHash + hashSeperator + s.OutputHash
+}
+
+func calculateHash(text string) string {
+	hash := md5.Sum([]byte(text))
+	return hex.EncodeToString(hash[:])
 }
 
 func problemToMap(problem string) (map[int]float64, string, error) {

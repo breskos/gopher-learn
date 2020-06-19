@@ -19,6 +19,8 @@ const (
 // Set holds the samples and the output labels
 type Set struct {
 	Samples      []Sample
+	VectorHashes []string
+	OutputHashes []string
 	ClassToLabel map[int]string
 	Usage        int
 }
@@ -49,6 +51,17 @@ func (s *Set) add(vector, output []float64, label string, classNumber int, value
 	sample.Label = label
 	sample.ClassNumber = classNumber
 	sample.Value = value
+	sample.updateHashes()
+	// register hashes in data set
+	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
+	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
+	s.Samples = append(s.Samples, sample)
+}
+
+func (s *Set) addSample(sample Sample) {
+	sample.updateHashes()
+	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
+	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 	s.Samples = append(s.Samples, sample)
 }
 
@@ -139,6 +152,10 @@ func (s *Set) LoadFromCSV(path string) (bool, error) {
 				sample.Vector[value] = f
 			}
 		}
+		sample.updateHashes()
+		// register hashes in data set
+		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
+		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 		s.Samples = append(s.Samples, sample)
 	}
 	s.createClassToLabel(classNumbers)
@@ -177,6 +194,19 @@ func (s *Set) createClassToLabel(mapping map[string]int) {
 
 }
 
+// SampleExists looks up in the set if the presented example already exists
+func (s *Set) SampleExists(test *Sample) bool {
+	if test.VectorHash == "" {
+		test.updateHashes()
+	}
+	for _, vector := range s.VectorHashes {
+		if vector == test.VectorHash {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadFromSVMFile load data from an svm problem file
 func (s *Set) LoadFromSVMFile(path string) (bool, error) {
 	classNumbers := make(map[string]int)
@@ -212,6 +242,10 @@ func (s *Set) LoadFromSVMFile(path string) (bool, error) {
 				sample.Vector[i] = 0.0
 			}
 		}
+		sample.updateHashes()
+		// register hashes in data set
+		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
+		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 		s.Samples = append(s.Samples, sample)
 	}
 	return true, nil
