@@ -29,24 +29,22 @@ type Sample struct {
 }
 
 // NewClassificationSample creates a new sample data point for classification
-func NewClassificationSample(vector, output []float64, classLabel string, classNumber int) *Sample {
+func NewClassificationSample(vector, output []float64, classLabel string) *Sample {
 	sample := &Sample{
-		Vector:      vector,
-		Output:      output,
-		Label:       classLabel,
-		ClassNumber: classNumber,
+		Vector: vector,
+		Output: output,
+		Label:  classLabel,
 	}
 	sample.UpdateHashes()
 	return sample
 }
 
 // NewRegressionSample creates a new sample data point for classification
-func NewRegressionSample(vector []float64, output float64, classLabel string, classNumber int) *Sample {
+func NewRegressionSample(vector []float64, output float64, classLabel string) *Sample {
 	sample := &Sample{
-		Vector:      vector,
-		Value:       output,
-		Label:       classLabel,
-		ClassNumber: classNumber,
+		Vector: vector,
+		Value:  output,
+		Label:  classLabel,
 	}
 	sample.UpdateHashes()
 	return sample

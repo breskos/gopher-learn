@@ -62,6 +62,8 @@ func NewOnline(usage int, inputs int, hiddenLayer []int, data *learn.Set) *Onlin
 }
 
 // TODO(abresk): LoadOnline function that loads a already working online network
+
+// Init initializes the online learner with a short learning upfront
 func (o *Online) Init() float64 {
 	fMeasure := 0.0
 	for i := 0; i < maxInitLoops; i++ {
@@ -75,14 +77,17 @@ func (o *Online) Init() float64 {
 }
 
 // Inject tries to inject a new data point into the neural net
-func (o *Online) Inject(sample *learn.Sample, force bool) (float64, error) {
+func (o *Online) Inject(sample *learn.Sample, force bool) error {
 	exists := o.Data.SampleExists(sample)
 	if exists && !force {
-		return 0.0, errors.New(errDataPointExists)
+		return errors.New(errDataPointExists)
 	}
-	o.Data.AddSample(sample)
+	err := o.Data.AddSample(sample)
+	if err != nil {
+		return fmt.Errorf("cannot add example: %v", err)
+	}
 	o.hotShot(sample)
-	return 0.0, nil
+	return nil
 }
 
 func (o *Online) hotShot(sample *learn.Sample) {

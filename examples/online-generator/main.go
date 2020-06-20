@@ -37,8 +37,11 @@ func main() {
 	fmt.Printf("set: %v\n", set)
 	for {
 		class := rand.Intn(2)
-		vector, target := createFeatureVector(classes[class])
-		sample := learn.NewClassificationSample(vector, target, classes[class], class)
+		classLabel := classes[class]
+		vector, target := createFeatureVector(classLabel)
+		// target could also be replaced with: set.GenerateOutputVector(classLabel)
+		sample := learn.NewClassificationSample(vector, target, classLabel)
+		// sample := learn.NewClassificationSample(vector, target, classLabel)
 		// here we inject a new sample from the generator
 		// if the data points already exists in the set (we are not forcing to override it)
 		o.Inject(sample, false)

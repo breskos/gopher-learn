@@ -3,6 +3,7 @@ package learn
 import (
 	"bufio"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,10 +13,12 @@ import (
 )
 
 const (
-	classYes       = 1.0
+	maxActivation  = 1.0
+	minActivation  = 0.0
 	labelRegressor = "output"
 
 	errUsageTypeNotMatching = "usage type not matching"
+	errClassLabelNotFound   = "class label not found in set"
 )
 
 // Set holds the samples and the output labels
@@ -71,11 +74,17 @@ func (s *Set) add(vector, output []float64, label string, classNumber int, value
 }
 
 // AddSample adds samples to the set
-func (s *Set) AddSample(sample *Sample) {
+func (s *Set) AddSample(sample *Sample) error {
+	index, err := s.getClassIndex(sample.Label)
+	if err != nil {
+		return err
+	}
+	sample.ClassNumber = index
 	sample.UpdateHashes()
 	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
 	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 	s.Samples = append(s.Samples, sample)
+	return nil
 }
 
 func (s *Set) getLabelFromClass(number int) (string, bool) {
@@ -181,7 +190,7 @@ func (s *Set) addOutputVectors() {
 		dim := len(s.ClassToLabel)
 		for sample := range s.Samples {
 			v := make([]float64, dim)
-			v[s.Samples[sample].ClassNumber] = classYes
+			v[s.Samples[sample].ClassNumber] = maxActivation
 			s.Samples[sample].Output = v
 		}
 	} else if s.Usage == neural.Regression {
@@ -262,4 +271,26 @@ func (s *Set) LoadFromSVMFile(path string) (bool, error) {
 		s.Samples = append(s.Samples, sample)
 	}
 	return true, nil
+}
+
+// GenerateOutputVector generates the output vector for a classification task and a specific label
+func (s *Set) GenerateOutputVector(label string) []float64 {
+	var output []float64
+	for _, v := range s.ClassToLabel {
+		if v == label {
+			output = append(output, maxActivation)
+		} else {
+			output = append(output, minActivation)
+		}
+	}
+	return output
+}
+
+func (s *Set) getClassIndex(label string) (int, error) {
+	for k, v := range s.ClassToLabel {
+		if label == v {
+			return k, nil
+		}
+	}
+	return 0, errors.New(errUsageTypeNotMatching)
 }
