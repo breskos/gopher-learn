@@ -285,16 +285,23 @@ func (e *Evaluation) PrintConfusionMatrix() {
 
 }
 
-// GetRegressionSummary returns a summary of the evaluated regression
-func (e *Evaluation) GetRegressionSummary() {
+// PrintSummaries prints the summaries of all classes
+func (e *Evaluation) PrintSummaries() {
+	for class := range e.Confusion {
+		e.PrintSummary(class)
+	}
+}
+
+// PrintRegressionSummary returns a summary of the evaluated regression
+func (e *Evaluation) PrintRegressionSummary() {
 	fmt.Println("summary")
 	fmt.Printf("correct: %v\n", e.Correct)
 	fmt.Printf("wrong: %v\n", e.Wrong)
 	fmt.Printf("ratio: %v\n", float64(e.Correct)/float64(e.Correct+e.Wrong))
 }
 
-// GetSummary returns a summary
-func (e *Evaluation) GetSummary(label string) {
+// PrintSummary returns a summary
+func (e *Evaluation) PrintSummary(label string) {
 	fmt.Printf("summary for class %v\n", label)
 	fmt.Printf(" * TP: %v TN: %v FP: %v FN: %v\n", e.GetTruePositives(label), e.GetTrueNegatives(label), e.GetFalsePositives(label), e.GetFalseNegatives(label))
 	fmt.Printf(" * Recall/Sensitivity: %.3f\n", e.GetRecall(label))

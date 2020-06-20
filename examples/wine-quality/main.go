@@ -35,7 +35,7 @@ func main() {
 	network, evaluation := e.GetWinner()
 
 	// regression evaluation
-	evaluation.GetRegressionSummary()
+	evaluation.PrintRegressionSummary()
 
 	err = persist.ToFile(networkFile, network)
 	if err != nil {

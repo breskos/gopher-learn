@@ -11,6 +11,7 @@
 - Artificial neural network written in Golang with training / testing framework
 - Rich measurement mechanisms to control the training
 - Examples for fast understanding
+- Can also be used for iterative online learning (using online module) for autonomous agents
 
 ## Install
 
@@ -20,6 +21,7 @@
   go get github.com/breskos/gopher-learn/learn
   go get github.com/breskos/gopher-learn/engine
   go get github.com/breskos/gopher-learn/evaluation
+  go get github.com/breskos/gopher-learn/online
 ```
 
 ## The gopher-learn engine
