@@ -13,11 +13,7 @@ const (
 	dataFile      = "data.csv"
 	networkFile   = "network.json"
 	dataSetFile   = "set.json"
-	tries         = 1
-	epochs        = 100
-	trainingSplit = 0.7
-	learningRate  = 0.4
-	decay         = 0.005
+	hiddenNeurons = 30
 )
 
 func main() {
@@ -32,7 +28,7 @@ func main() {
 	onlineSet.AddClass("R")
 	onlineSet.AddClass("M")
 
-	o := online.NewOnline(neural.Classification, len(data.Samples[0].Vector), []int{30}, onlineSet)
+	o := online.NewOnline(neural.Classification, len(data.Samples[0].Vector), []int{hiddenNeurons}, onlineSet)
 	o.SetVerbose(true)
 
 	l := len(data.Samples)

@@ -11,18 +11,13 @@ import (
 )
 
 const (
-	dataFile      = "data.csv"
-	networkFile   = "network.json"
-	dataSetFile   = "set.json"
-	tries         = 1
-	epochs        = 100
-	trainingSplit = 0.7
-	learningRate  = 0.4
-	// not using decay right now
-	decay          = 0.005
+	dataFile       = "data.csv"
+	networkFile    = "network.json"
+	dataSetFile    = "set.json"
 	classLabelY    = "Y"
 	classLabelN    = "N"
 	numberOfInputs = 7
+	hiddenNeurons  = 30
 )
 
 func main() {
@@ -31,7 +26,7 @@ func main() {
 	set.AddClass(classLabelY) // class on index 0
 	set.AddClass(classLabelN) // class on index 1
 	classes := []string{classLabelY, classLabelN}
-	o := online.NewOnline(neural.Classification, numberOfInputs, []int{30}, set)
+	o := online.NewOnline(neural.Classification, numberOfInputs, []int{hiddenNeurons}, set)
 	o.SetVerbose(true)
 	i := 0
 	fmt.Printf("set: %v\n", set)
