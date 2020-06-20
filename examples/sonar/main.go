@@ -31,9 +31,9 @@ func main() {
 	e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 	network, evaluation := e.GetWinner()
 
-	evaluation.GetSummary("R")
+	evaluation.PrintSummary("R")
 	fmt.Println()
-	evaluation.GetSummary("M")
+	evaluation.PrintSummary("M")
 
 	err = persist.SetToFile(dataSetFile, data)
 	if err != nil {
