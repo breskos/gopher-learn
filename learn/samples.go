@@ -21,21 +21,45 @@ const (
 type Sample struct {
 	Vector      []float64
 	Output      []float64
+	Value       float64
 	VectorHash  string
 	OutputHash  string
 	Label       string
 	ClassNumber int
-	Value       float64
+}
+
+// NewClassificationSample creates a new sample data point for classification
+func NewClassificationSample(vector, output []float64, classLabel string, classNumber int) *Sample {
+	sample := &Sample{
+		Vector:      vector,
+		Output:      output,
+		Label:       classLabel,
+		ClassNumber: classNumber,
+	}
+	sample.UpdateHashes()
+	return sample
+}
+
+// NewRegressionSample creates a new sample data point for classification
+func NewRegressionSample(vector []float64, output float64, classLabel string, classNumber int) *Sample {
+	sample := &Sample{
+		Vector:      vector,
+		Value:       output,
+		Label:       classLabel,
+		ClassNumber: classNumber,
+	}
+	sample.UpdateHashes()
+	return sample
 }
 
 func splitSamples(set *Set, ratio float64) (Set, Set) {
 	normalizedRatio := int(ratio * 100.0)
 	firstSet := Set{
-		Samples:      make([]Sample, 0),
+		Samples:      make([]*Sample, 0),
 		ClassToLabel: set.ClassToLabel,
 	}
 	secondSet := Set{
-		Samples:      make([]Sample, 0),
+		Samples:      make([]*Sample, 0),
 		ClassToLabel: set.ClassToLabel,
 	}
 	for i := range set.Samples {
@@ -48,7 +72,8 @@ func splitSamples(set *Set, ratio float64) (Set, Set) {
 	return firstSet, secondSet
 }
 
-func (s *Sample) updateHashes() {
+// UpdateHashes updates hashes of vector and output vector
+func (s *Sample) UpdateHashes() {
 	text := ""
 	for k, v := range s.Vector {
 		text += fmt.Sprintf("%v:%v;", k, v)
@@ -57,21 +82,16 @@ func (s *Sample) updateHashes() {
 	text = ""
 	for k, v := range s.Label {
 		text += fmt.Sprintf("%v:%v;", k, v)
+
 	}
+	text += fmt.Sprintf("%v", s.Value)
 	s.OutputHash = calculateHash(text)
 }
 
-func (s *Sample) getVectorHash() string {
-	return s.VectorHash
-}
-
-func (s *Sample) getOutputHash() string {
-	return s.OutputHash
-}
-
-func (s *Sample) getOverallHash() string {
+// GetHash calculates the has of feature vector and output and returns it
+func (s *Sample) GetHash() string {
 	if s.OutputHash == "" || s.VectorHash == "" {
-		s.updateHashes()
+		s.UpdateHashes()
 	}
 	return s.VectorHash + hashSeperator + s.OutputHash
 }

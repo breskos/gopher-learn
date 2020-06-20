@@ -14,11 +14,13 @@ import (
 const (
 	classYes       = 1.0
 	labelRegressor = "output"
+
+	errUsageTypeNotMatching = "usage type not matching"
 )
 
 // Set holds the samples and the output labels
 type Set struct {
-	Samples      []Sample
+	Samples      []*Sample
 	VectorHashes []string
 	OutputHashes []string
 	ClassToLabel map[int]string
@@ -28,10 +30,20 @@ type Set struct {
 // NewSet creates a new set of empty data samples
 func NewSet(usage int) *Set {
 	return &Set{
-		Samples:      make([]Sample, 0),
+		Samples:      make([]*Sample, 0),
 		ClassToLabel: make(map[int]string),
 		Usage:        usage,
 	}
+}
+
+// AddClass returns the classes in the set
+func (s *Set) AddClass(label string) (bool, error) {
+	if s.Usage != neural.Classification {
+		return false, fmt.Errorf(errUsageTypeNotMatching)
+	}
+	l := len(s.ClassToLabel)
+	s.ClassToLabel[l] = label
+	return true, nil
 }
 
 // GetClasses returns the classes in the set
@@ -45,21 +57,22 @@ func (s *Set) GetClasses() []string {
 
 // TODO (abresk) two options: a) remove this function, b) put regression / classifciation add logic here
 func (s *Set) add(vector, output []float64, label string, classNumber int, value float64) {
-	var sample Sample
+	sample := &Sample{}
 	sample.Vector = vector
 	sample.Output = output
 	sample.Label = label
 	sample.ClassNumber = classNumber
 	sample.Value = value
-	sample.updateHashes()
+	sample.UpdateHashes()
 	// register hashes in data set
 	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
 	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 	s.Samples = append(s.Samples, sample)
 }
 
-func (s *Set) addSample(sample Sample) {
-	sample.updateHashes()
+// AddSample adds samples to the set
+func (s *Set) AddSample(sample *Sample) {
+	sample.UpdateHashes()
 	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
 	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
 	s.Samples = append(s.Samples, sample)
@@ -129,7 +142,7 @@ func (s *Set) LoadFromCSV(path string) (bool, error) {
 			break
 		}
 		l := len(record)
-		var sample Sample
+		sample := &Sample{}
 		sample.Vector = make([]float64, l-1)
 		if s.Usage == neural.Regression {
 			regression, err := strconv.ParseFloat(record[l-1], 64)
@@ -152,7 +165,7 @@ func (s *Set) LoadFromCSV(path string) (bool, error) {
 				sample.Vector[value] = f
 			}
 		}
-		sample.updateHashes()
+		sample.UpdateHashes()
 		// register hashes in data set
 		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
 		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
@@ -197,7 +210,7 @@ func (s *Set) createClassToLabel(mapping map[string]int) {
 // SampleExists looks up in the set if the presented example already exists
 func (s *Set) SampleExists(test *Sample) bool {
 	if test.VectorHash == "" {
-		test.updateHashes()
+		test.UpdateHashes()
 	}
 	for _, vector := range s.VectorHashes {
 		if vector == test.VectorHash {
@@ -224,7 +237,7 @@ func (s *Set) LoadFromSVMFile(path string) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error while scanning files: %v", err)
 		}
-		var sample Sample
+		sample := &Sample{}
 		sample.Vector = make([]float64, highestIndex)
 		sample.Label = label
 		regression, err := strconv.ParseFloat(label, 64)
@@ -242,7 +255,7 @@ func (s *Set) LoadFromSVMFile(path string) (bool, error) {
 				sample.Vector[i] = 0.0
 			}
 		}
-		sample.updateHashes()
+		sample.UpdateHashes()
 		// register hashes in data set
 		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
 		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)

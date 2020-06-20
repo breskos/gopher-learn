@@ -62,18 +62,21 @@ func (n *Network) initEnters(in int) {
 	}
 }
 
+// ConnectLayers connects all layers with corresponding neurons
 func (n *Network) ConnectLayers() {
 	for i := len(n.Layers) - 1; i > 0; i-- {
 		n.Layers[i-1].ConnectTo(n.Layers[i])
 	}
 }
 
+// ConnectEnters connects the input neurons with the first hidden layer
 func (n *Network) ConnectEnters() {
 	for _, e := range n.Enters {
 		e.ConnectTo(n.Layers[0])
 	}
 }
 
+// SetActivationFunction sets the activation function for the network
 func (n *Network) SetActivationFunction(aFunc ActivationFunction) {
 	for _, l := range n.Layers {
 		for _, n := range l.Neurons {
@@ -115,6 +118,7 @@ func (n *Network) generateOut() {
 	}
 }
 
+// Calculate calculates the result of a input vector
 func (n *Network) Calculate(enters []float64) []float64 {
 	n.setEnters(&enters)
 	n.sendEnters()
@@ -124,6 +128,7 @@ func (n *Network) Calculate(enters []float64) []float64 {
 	return n.Out
 }
 
+// CalculateLabels output with all labels of output neurons
 func (n *Network) CalculateLabels(enters []float64) map[string]float64 {
 	results := make(map[string]float64)
 	out := n.Calculate(enters)
@@ -133,6 +138,7 @@ func (n *Network) CalculateLabels(enters []float64) map[string]float64 {
 	return results
 }
 
+// CalculateWinnerLabel calculates the output and just returns the label of the winning euron
 func (n *Network) CalculateWinnerLabel(enters []float64) string {
 	calculatedLabels := n.CalculateLabels(enters)
 	winnerValue := 0.0
@@ -146,6 +152,7 @@ func (n *Network) CalculateWinnerLabel(enters []float64) string {
 	return winnerLabel
 }
 
+// RandomizeSynapses applies a random value to all synapses
 func (n *Network) RandomizeSynapses() {
 	for _, l := range n.Layers {
 		for _, n := range l.Neurons {
