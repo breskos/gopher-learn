@@ -44,7 +44,8 @@ This is kind of a tradeoff between learning and repeating everything and speed.
 ```golang
 // here we get a new vector for the network
 vector := []float64{1.0, 3.0, 10.5, 5.0, 4.0, 3.3, 5.2}
-target := []float64{1.0, 0.0} // target class R
+// now we apply this vector and generate a valid output vector for this class label
+// using: GenerateOutputVector(classLabel) function of Set
 sample := learn.NewClassificationSample(vector, set.GenerateOutputVector("R"), "R")
 // create a sample with input vector and class label
 // if a sample of this exists do not override it (force = false)
