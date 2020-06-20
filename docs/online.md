@@ -39,7 +39,7 @@ fmt.Printf("init fMeasure: &f\n", fMeasure)
 After this set up you can start injecting data points to the network.
 Dont forget to call iterate at some points to force the learning process.
 The `Inject()` function just runs **hot shot** which means that it tries to force the injection without retraining the network.
-This is kind of a tradeoff between learning and repeating everything and speed.
+This is kind of a tradeoff between learning speed and repeating everything in the data set.
 
 ```golang
 // here we get a new vector for the network
