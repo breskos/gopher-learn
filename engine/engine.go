@@ -75,7 +75,7 @@ func (e *Engine) Start(criterion, tries, epochs int, trainingSplit, startLearnin
 			fmt.Printf("\n> start try %v. training / test: %v / %v (%v)\n", (try + 1), len(training.Samples), len(validation.Samples), trainingSplit)
 		}
 		for ; learning > 0.0; learning -= decay {
-			train(e.Usage, network, training, learning, epochs)
+			train(e.Usage, network, training, learning, epochs, e.Verbose)
 			evaluation := evaluate(e.Usage, network, validation, training, e.RegressionThreshold)
 			if compare(e.Usage, criterion, &e.WinnerEvaluation, evaluation) {
 				e.WinnerNetwork = copy(network)
@@ -111,14 +111,19 @@ func split(usage int, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	return &training, &evaluation
 }
 
-func train(usage int, network *neural.Network, data *learn.Set, learning float64, epochs int) {
+func train(usage int, network *neural.Network, data *learn.Set, learning float64, epochs int, verbose bool) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
 			learn.Learn(network, data.Samples[sample].Vector, data.Samples[sample].Output, learning)
 		}
-		fmt.Print(epochToken)
+		if verbose {
+			fmt.Print(epochToken)
+		}
 	}
-	fmt.Print(runToken)
+	if verbose {
+		fmt.Print(runToken)
+	}
+
 }
 
 func evaluate(usage int, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
