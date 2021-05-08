@@ -11,9 +11,6 @@ import (
 )
 
 const (
-	dataFile       = "data.csv"
-	networkFile    = "network.json"
-	dataSetFile    = "set.json"
 	classLabelY    = "Y"
 	classLabelN    = "N"
 	numberOfInputs = 7
@@ -44,7 +41,6 @@ func main() {
 			_ = o.Iterate()
 		}
 	}
-
 }
 
 func createFeatureVector(class string) ([]float64, []float64) {
