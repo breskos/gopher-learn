@@ -1,8 +1,10 @@
 package neural
 
+type NetworkType int
+
 const (
 	// Classification describes the mode of operation: classification
-	Classification = 0
+	Classification NetworkType = iota
 	// Regression describes the mode of operation: regression
-	Regression = 1
+	Regression
 )

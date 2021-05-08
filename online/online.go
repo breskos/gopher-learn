@@ -34,7 +34,7 @@ type Online struct {
 	Network        *neural.Network
 	LastEvaluation *evaluation.Evaluation
 	Verbose        bool
-	Usage          int
+	Usage          neural.NetworkType
 	AddedPoints    int
 	// TODO(abresk) implement this correct in learn etc
 	RegressionThreshold float64
@@ -42,7 +42,7 @@ type Online struct {
 }
 
 // NewOnline creates a new Engine object
-func NewOnline(usage int, inputs int, hiddenLayer []int, data *learn.Set) *Online {
+func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *learn.Set) *Online {
 	var outputLength int
 	if neural.Regression == usage {
 		outputLength = 1
@@ -105,7 +105,7 @@ func (o *Online) Iterate() float64 {
 	training, testing := split(o.Usage, o.Data, trainingSplit)
 	speed := minLearningSpeed + rand.Float64()*(maxLearningSpeed-minLearningSpeed)
 	epochs := rand.Intn(maxEpochs-minEpochs+1) + minEpochs
-	train(o.Usage, o.Network, training, speed, epochs)
+	train(o.Network, training, speed, epochs)
 	evaluation := evaluate(o.Usage, o.Network, testing, training, o.RegressionThreshold)
 	if o.Verbose {
 		evaluation.PrintConfusionMatrix()
@@ -120,7 +120,7 @@ func (o *Online) SetVerbose(verbose bool) {
 	o.Verbose = verbose
 }
 
-func train(usage int, network *neural.Network, data *learn.Set, learning float64, epochs int) {
+func train(network *neural.Network, data *learn.Set, learning float64, epochs int) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
 			learn.Learn(network, data.Samples[sample].Vector, data.Samples[sample].Output, learning)
@@ -142,7 +142,7 @@ func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
 }
 
-func split(usage int, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
+func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	multiplier := 100
 	normalizedRatio := int(ratio * float64(multiplier))
 	var training, evaluation learn.Set
@@ -158,7 +158,7 @@ func split(usage int, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	return &training, &evaluation
 }
 
-func evaluate(usage int, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
+func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
 	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
 	evaluation.SetRegressionThreshold(regressionThreshold)
 	for sample := range test.Samples {
