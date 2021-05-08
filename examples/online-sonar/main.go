@@ -36,7 +36,8 @@ func main() {
 		o.Inject(data.Samples[i], false)
 		if i%5 == 0 {
 			fmt.Printf("\n\nAFTER INJECTING %d samples\n", i)
-			_ = o.Iterate()
+			o.Iterate() // this function also returns the F-Measure
+
 		}
 	}
 

@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	dataFile            = "winequality-white.csv"
+	dataFile            = "winequality-red.csv"
 	networkFile         = "network.json"
 	tries               = 1
-	epochs              = 100
-	trainingSplit       = 0.7
-	learningRate        = 0.9
+	epochs              = 200
+	trainingSplit       = 0.8
+	learningRate        = 0.02
 	decay               = 0.001
-	hiddenNeurons       = 100
-	regressionThreshold = 0.005 // helps evaluation to define between wrong or right
+	hiddenNeurons       = 50
+	regressionThreshold = 0.04 // helps evaluation to define between wrong or right
 )
 
 func main() {
@@ -30,8 +30,8 @@ func main() {
 	e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
 	e.SetRegressionThreshold(regressionThreshold)
 	e.SetVerbose(true)
-	// here we ware choosing CriterionSimple because we want the regressor that produces the best examples
-	e.Start(neural.CriterionSimple, tries, epochs, trainingSplit, learningRate, decay)
+	// here we ware choosing Distance because we want the regressor that produces the best examples
+	e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 	network, evaluation := e.GetWinner()
 
 	// regression evaluation
