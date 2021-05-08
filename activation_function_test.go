@@ -1,13 +1,19 @@
 package neural
 
 import (
-	. "launchpad.net/gocheck"
+	"testing"
 )
 
-func (s *SuiteT) TestLogisticFunc(c *C) {
+func TestLogisticFunc(t *testing.T) {
 	f := NewLogisticFunc(1)
 
-	c.Assert(f(0), Equals, 0.5)
-	c.Assert(1-f(6) > 0, Equals, true)
-	c.Assert(1-f(6) < 0.1, Equals, true)
+	if f(0) != 0.5 {
+		t.Errorf("f(0) not equal 0.5")
+	}
+	if 1-f(6) <= 0 {
+		t.Errorf("1-f(6) not > 0")
+	}
+	if 1-f(6) >= 0.1 {
+		t.Errorf("1-f(6) not < 0.1")
+	}
 }

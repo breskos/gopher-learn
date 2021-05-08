@@ -56,8 +56,8 @@ e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, de
 #### Use evalation mode
 
 ```go
-evaluation.GetSummary("name of class1")
-evaluation.GetSummary("name of class2")
+evaluation.PrintSummary("name of class1")
+evaluation.PrintSummary("name of class2")
 evaluation.PrintConfusionMatrix()
 ```
 
@@ -151,8 +151,8 @@ func main() {
 	e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
 	network, evaluation := e.GetWinner()
 
-	evaluation.GetSummary("name of class1")
-	evaluation.GetSummary("name of class2")
+	evaluation.PrintSummary("name of class1")
+	evaluation.PrintSummary("name of class2")
 
 	err = persist.ToFile(networkFile, network)
 	if err != nil {

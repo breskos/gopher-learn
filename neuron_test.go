@@ -1,25 +1,25 @@
 package neural
 
 import (
-	. "launchpad.net/gocheck"
+	"testing"
 )
 
-func (s *SuiteT) TestAttachNeurons(c *C) {
+func TestAttachNeurons(t *testing.T) {
 	n := NewNeuron()
 	n2 := NewNeuron()
 	w := 0.5
-
 	n.SynapseTo(n2, w)
-
-	c.Assert(n.OutSynapses[0].Weight, Equals, w)
+	if n.OutSynapses[0].Weight != w {
+		t.Errorf("out synapse has wrong weights")
+	}
 }
 
-func (s *SuiteT) TestInputsSynapses(c *C) {
+func TestInputsSynapses(t *testing.T) {
 	n := NewNeuron()
-
 	NewSynapseFromTo(NewNeuron(), n, 0.1)
 	NewSynapseFromTo(NewNeuron(), n, 0.1)
 	NewSynapseFromTo(NewNeuron(), n, 0.1)
-
-	c.Assert(n.InSynapses, HasLen, 3)
+	if len(n.InSynapses) != 3 {
+		t.Errorf("in synapse is not 3")
+	}
 }

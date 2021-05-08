@@ -1,15 +1,17 @@
 package neural
 
 import (
-	. "launchpad.net/gocheck"
+	"testing"
 )
 
-func (s *SuiteT) TestLayer(c *C) {
+func TestLayer(t *testing.T) {
 	l := NewLayer(5)
-	c.Assert(l.Neurons, HasLen, 5)
+	if len(l.Neurons) != 5 {
+		t.Errorf("len of Neurons not 5")
+	}
 }
 
-func (s *SuiteT) TestConnectToLayer(c *C) {
+func TestConnectToLayer(t *testing.T) {
 	count := 5
 	l := NewLayer(count)
 	l2 := NewLayer(count)
@@ -17,7 +19,8 @@ func (s *SuiteT) TestConnectToLayer(c *C) {
 	l.ConnectTo(l2)
 
 	for _, n := range l.Neurons {
-		c.Assert(n.OutSynapses, HasLen, count)
+		if len(n.OutSynapses) != count {
+			t.Errorf("out synapses are not equal %d", count)
+		}
 	}
-
 }
