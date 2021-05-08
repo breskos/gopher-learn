@@ -5,18 +5,19 @@ import (
 	"math/rand"
 )
 
+type Criterion int
+
 const (
-	// CriterionAccuracy decides evaluation by accuracy
-	CriterionAccuracy = 0
-	// CriterionBalancedAccuracy decides evaluation by balanced accuracy
-	CriterionBalancedAccuracy = 1
-	// CriterionFMeasure decides evaluation by f-measure
-	CriterionFMeasure = 2
-	// CriterionSimple decides on simple wrong/correct ratio
-	CriterionSimple = 3
-	// CriterionDistance decieds evaluation by distance to ideal output
-	CriterionDistance = 4
-	// some output tokens
+	// Accuracy decides evaluation by accuracy
+	Accuracy Criterion = iota
+	// BalancedAccuracy decides evaluation by balanced accuracy
+	BalancedAccuracy
+	// FMeasure decides evaluation by f-measure
+	FMeasure
+	// Simple decides on simple wrong/correct ratio
+	Simple
+	// Distance decides evaluation by distance to ideal output
+	Distance
 )
 
 // TODO (abresk) write tests for CalculateLabels, CalculateWinnerLabel
@@ -164,7 +165,7 @@ func (n *Network) RandomizeSynapses() {
 }
 
 // BuildNetwork builds a neural network from parameters given
-func BuildNetwork(usage int, input int, hidden []int, labels map[int]string) *Network {
+func BuildNetwork(usage NetworkType, input int, hidden []int, labels map[int]string) *Network {
 	hidden = append(hidden, len(labels))
 	network := NewNetwork(input, hidden, labels)
 	network.RandomizeSynapses()

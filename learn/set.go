@@ -27,11 +27,11 @@ type Set struct {
 	VectorHashes []string
 	OutputHashes []string
 	ClassToLabel map[int]string
-	Usage        int
+	Usage        neural.NetworkType
 }
 
 // NewSet creates a new set of empty data samples
-func NewSet(usage int) *Set {
+func NewSet(usage neural.NetworkType) *Set {
 	return &Set{
 		Samples:      make([]*Sample, 0),
 		ClassToLabel: make(map[int]string),

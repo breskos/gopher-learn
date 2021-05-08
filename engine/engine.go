@@ -25,12 +25,12 @@ type Engine struct {
 	WinnerNetwork       *neural.Network
 	WinnerEvaluation    evaluation.Evaluation
 	Verbose             bool
-	Usage               int
+	Usage               neural.NetworkType
 	RegressionThreshold float64
 }
 
 // NewEngine creates a new Engine object
-func NewEngine(usage int, hiddenLayer []int, data *learn.Set) *Engine {
+func NewEngine(usage neural.NetworkType, hiddenLayer []int, data *learn.Set) *Engine {
 	var outputLength int
 	if neural.Regression == usage {
 		outputLength = 1
@@ -66,7 +66,7 @@ func (e *Engine) GetWinner() (*neural.Network, *evaluation.Evaluation) {
 }
 
 // Start takes the paramter to start the engine and run it
-func (e *Engine) Start(criterion, tries, epochs int, trainingSplit, startLearning, decay float64) {
+func (e *Engine) Start(criterion neural.Criterion, tries, epochs int, trainingSplit, startLearning, decay float64) {
 	network := neural.BuildNetwork(e.Usage, e.NetworkInput, e.NetworkLayer, e.Data.ClassToLabel)
 	training, validation := split(e.Usage, e.Data, trainingSplit)
 	for try := 0; try < tries; try++ {
@@ -75,7 +75,7 @@ func (e *Engine) Start(criterion, tries, epochs int, trainingSplit, startLearnin
 			fmt.Printf("\n> start try %v. training / test: %v / %v (%v)\n", (try + 1), len(training.Samples), len(validation.Samples), trainingSplit)
 		}
 		for ; learning > 0.0; learning -= decay {
-			train(e.Usage, network, training, learning, epochs, e.Verbose)
+			train(network, training, learning, epochs, e.Verbose)
 			evaluation := evaluate(e.Usage, network, validation, training, e.RegressionThreshold)
 			if compare(e.Usage, criterion, &e.WinnerEvaluation, evaluation) {
 				e.WinnerNetwork = copy(network)
@@ -95,7 +95,7 @@ func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
 }
 
-func split(usage int, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
+func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	multiplier := 100
 	normalizedRatio := int(ratio * float64(multiplier))
 	var training, evaluation learn.Set
@@ -111,7 +111,7 @@ func split(usage int, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	return &training, &evaluation
 }
 
-func train(usage int, network *neural.Network, data *learn.Set, learning float64, epochs int, verbose bool) {
+func train(network *neural.Network, data *learn.Set, learning float64, epochs int, verbose bool) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
 			learn.Learn(network, data.Samples[sample].Vector, data.Samples[sample].Output, learning)
@@ -126,7 +126,7 @@ func train(usage int, network *neural.Network, data *learn.Set, learning float64
 
 }
 
-func evaluate(usage int, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
+func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
 	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
 	evaluation.SetRegressionThreshold(regressionThreshold)
 	for sample := range test.Samples {
@@ -142,28 +142,28 @@ func evaluate(usage int, network *neural.Network, test *learn.Set, train *learn.
 	return evaluation
 }
 
-func compare(usage int, criterion int, current *evaluation.Evaluation, try *evaluation.Evaluation) bool {
+func compare(usage neural.NetworkType, criterion neural.Criterion, current *evaluation.Evaluation, try *evaluation.Evaluation) bool {
 	if current.Correct+current.Wrong == 0 {
 		return true
 	}
 	switch criterion {
-	case neural.CriterionAccuracy:
+	case neural.Accuracy:
 		if current.GetOverallAccuracy() < try.GetOverallAccuracy() {
 			return true
 		}
-	case neural.CriterionBalancedAccuracy:
+	case neural.BalancedAccuracy:
 		if current.GetOverallBalancedAccuracy() < try.GetOverallBalancedAccuracy() {
 			return true
 		}
-	case neural.CriterionFMeasure:
+	case neural.FMeasure:
 		if current.GetOverallFMeasure() < try.GetOverallFMeasure() {
 			return true
 		}
-	case neural.CriterionSimple:
+	case neural.Simple:
 		if current.GetCorrectRatio() < try.GetCorrectRatio() {
 			return true
 		}
-	case neural.CriterionDistance:
+	case neural.Distance:
 		if current.GetDistance() > try.GetDistance() {
 			return true
 		}

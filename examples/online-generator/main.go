@@ -24,6 +24,7 @@ func main() {
 	set.AddClass(classLabelN) // class on index 1
 	classes := []string{classLabelY, classLabelN}
 	o := online.NewOnline(neural.Classification, numberOfInputs, []int{hiddenNeurons}, set)
+	// you can set Verbose to true to gain more insights
 	o.SetVerbose(true)
 	i := 0
 	fmt.Printf("set: %v\n", set)
@@ -38,7 +39,7 @@ func main() {
 		// if the data points already exists in the set (we are not forcing to override it)
 		o.Inject(sample, false)
 		if i%20 == 0 {
-			_ = o.Iterate()
+			o.Iterate() // this function returns the F-Measure of the current state
 		}
 	}
 }

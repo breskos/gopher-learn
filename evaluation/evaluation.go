@@ -15,12 +15,12 @@ type Evaluation struct {
 	Correct         int
 	Wrong           int
 	OverallDistance float64
-	Usage           int
+	Usage           neural.NetworkType
 	Threshold       float64
 }
 
 // NewEvaluation creates a new evaluation object
-func NewEvaluation(usage int, classes []string) *Evaluation {
+func NewEvaluation(usage neural.NetworkType, classes []string) *Evaluation {
 	evaluation := &Evaluation{
 		Usage:     usage,
 		Confusion: make(map[string]map[string]int),
@@ -260,7 +260,7 @@ func (e *Evaluation) AddDistance(n *neural.Network, in, ideal []float64) float64
 
 // GetDistance returns the distance from the evaluation
 func (e *Evaluation) GetDistance() float64 {
-	return e.OverallDistance / float64(e.Wrong+e.Correct)
+	return e.OverallDistance
 }
 
 // GetCorrectRatio returns correct classified samples ratio
