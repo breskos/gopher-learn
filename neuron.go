@@ -1,6 +1,8 @@
 package neural
 
-// Neuron holds the data a neuron needs
+// Neuron holds the neuron structure with incoming synapses,
+// outgoing synapses, the activation function of the neuron as well as
+// the out value.
 type Neuron struct {
 	OutSynapses        []*Synapse
 	InSynapses         []*Synapse         `json:"-"`
@@ -8,7 +10,7 @@ type Neuron struct {
 	Out                float64            `json:"-"`
 }
 
-// NewNeuron creates a new neuron
+// NewNeuron creates a new empty neuron
 func NewNeuron() *Neuron {
 	return &Neuron{}
 }

@@ -89,6 +89,7 @@ func (e *Engine) Start(criterion neural.Criterion, tries, epochs int, trainingSp
 	}
 }
 
+// Prints the current evaluation
 func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
 }

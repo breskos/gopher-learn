@@ -4,6 +4,7 @@ import (
 	"testing"
 )
 
+// TestLayer creates a layer with 5 neurons and tests if it was successful
 func TestLayer(t *testing.T) {
 	l := NewLayer(5)
 	if len(l.Neurons) != 5 {
@@ -11,6 +12,7 @@ func TestLayer(t *testing.T) {
 	}
 }
 
+// TestConnectToLayer creates two layers and tries to connect both of them
 func TestConnectToLayer(t *testing.T) {
 	count := 5
 	l := NewLayer(count)

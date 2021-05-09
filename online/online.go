@@ -86,6 +86,7 @@ func (o *Online) Inject(sample *learn.Sample, force bool) error {
 	return nil
 }
 
+// Applies a Sample with hotShot speed to the network
 func (o *Online) hotShot(sample *learn.Sample) {
 	for i := 0; i < firstShots; i++ {
 		learn.Learn(o.Network, sample.Vector, sample.Output, hotShotLearningSpeed)
@@ -126,6 +127,7 @@ func (o *Online) sampleExists(sample *learn.Sample) bool {
 	return false
 }
 
+// Prints the current evaluation
 func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
 }
