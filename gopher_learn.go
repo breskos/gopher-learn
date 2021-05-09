@@ -11,5 +11,5 @@ const (
 	Regression
 
 	// Version of gopher-learn
-	Version = "v0.1.1"
+	Version = "v0.2"
 )
