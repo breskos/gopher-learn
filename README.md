@@ -16,12 +16,7 @@
 ## Install
 
 ```
-  go get github.com/breskos/gopher-learn
-  go get github.com/breskos/gopher-learn/persist
-  go get github.com/breskos/gopher-learn/learn
-  go get github.com/breskos/gopher-learn/engine
-  go get github.com/breskos/gopher-learn/evaluation
-  go get github.com/breskos/gopher-learn/online
+  go get github.com/breskos/gopher-learn/...
 ```
 
 ## The gopher-learn engine
