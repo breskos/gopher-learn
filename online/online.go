@@ -27,18 +27,16 @@ const (
 
 // Online contains every necessary for starting the engine
 type Online struct {
-	NetworkInput   int
-	NetworkLayer   []int
-	NetworkOutput  int
-	Data           *learn.Set
-	Network        *neural.Network
-	LastEvaluation *evaluation.Evaluation
-	Verbose        bool
-	Usage          neural.NetworkType
-	AddedPoints    int
-	// TODO(abresk) implement this correct in learn etc
+	NetworkInput        int
+	NetworkLayer        []int
+	NetworkOutput       int
+	Data                *learn.Set
+	Network             *neural.Network
+	LastEvaluation      *evaluation.Evaluation
+	Verbose             bool
+	Usage               neural.NetworkType
+	AddedPoints         int
 	RegressionThreshold float64
-	// TODO(abresk) add measures from the current model here!
 }
 
 // NewOnline creates a new Engine object
@@ -60,8 +58,6 @@ func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *le
 		AddedPoints:   0,
 	}
 }
-
-// TODO(abresk): LoadOnline function that loads a already working online network
 
 // Init initializes the online learner with a short learning upfront
 func (o *Online) Init() float64 {
