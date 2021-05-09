@@ -50,7 +50,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -83,7 +83,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.nDistance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -111,7 +111,7 @@ To let the engine decide for the best model, a few criterias were implemented. T
 ```go
 ...
 e := engine.NewEngine(neural.Classification, []int{100}, data)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 ...
 ```
 
@@ -148,7 +148,7 @@ func main() {
 	}
 	e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 	e.SetVerbose(true)
-	e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+	e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 	network, evaluation := e.GetWinner()
 
 	evaluation.PrintSummary("name of class1")
