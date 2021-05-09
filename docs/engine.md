@@ -13,6 +13,12 @@ Instead of fine tuning parameters and split data sets on your own, you can use t
 
 See examples **sonar** and **wine-quality** for more insights on the engine.
 
+## Config in Engine
+Engine comes with a default config.
+For classification tasks the default configuration should fit.
+On the other hand for regression you should set Config that fits your data set.
+Handling of the config is shown in the examples.
+
 ## Rough pseudo code description
 
 ```go
