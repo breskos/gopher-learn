@@ -12,17 +12,7 @@ import (
 )
 
 const (
-	errDataPointExists   = "data point exists (force not activated)"
-	firstShots           = 5
-	hotShotLearningSpeed = 0.8
-	trainingSplit        = 0.7
-	minimumDataPoints    = 10
-	minEpochs            = 10
-	maxEpochs            = 30
-	minLearningSpeed     = 0.2
-	maxLearningSpeed     = 0.5
-	initialFMeasure      = 0.85
-	maxInitLoops         = 5
+	errDataPointExists = "data point exists (force not activated)"
 )
 
 // Online contains every necessary for starting the engine
@@ -36,6 +26,7 @@ type Online struct {
 	Verbose             bool
 	Usage               neural.NetworkType
 	AddedPoints         int
+	Config              *Config
 	RegressionThreshold float64
 }
 
@@ -56,15 +47,16 @@ func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *le
 		Verbose:       false,
 		Usage:         usage,
 		AddedPoints:   0,
+		Config:        DefaultConfig(),
 	}
 }
 
 // Init initializes the online learner with a short learning upfront
 func (o *Online) Init() float64 {
 	fMeasure := 0.0
-	for i := 0; i < maxInitLoops; i++ {
+	for i := 0; i < o.Config.MaxInitLoops; i++ {
 		fMeasure = o.Iterate()
-		if fMeasure < initialFMeasure {
+		if fMeasure < o.Config.InitialFMeasure {
 			return fMeasure
 		}
 	}
@@ -88,20 +80,20 @@ func (o *Online) Inject(sample *learn.Sample, force bool) error {
 
 // Applies a Sample with hotShot speed to the network
 func (o *Online) hotShot(sample *learn.Sample) {
-	for i := 0; i < firstShots; i++ {
-		learn.Learn(o.Network, sample.Vector, sample.Output, hotShotLearningSpeed)
+	for i := 0; i < o.Config.FirstShots; i++ {
+		learn.Learn(o.Network, sample.Vector, sample.Output, o.Config.HotShotBoost)
 	}
 }
 
 // Iterate iterates over the data set and applies continous learning
 func (o *Online) Iterate() float64 {
-	if len(o.Data.Samples) < minimumDataPoints {
+	if len(o.Data.Samples) < o.Config.MinimumDataPoints {
 		return 0.0
 	}
 	rand.Seed(time.Now().UnixNano())
-	training, testing := split(o.Usage, o.Data, trainingSplit)
-	speed := minLearningSpeed + rand.Float64()*(maxLearningSpeed-minLearningSpeed)
-	epochs := rand.Intn(maxEpochs-minEpochs+1) + minEpochs
+	training, testing := split(o.Usage, o.Data, o.Config.TrainingSplit)
+	speed := o.Config.MinLearningSpeed + rand.Float64()*(o.Config.MaxLearningSpeed-o.Config.MinLearningSpeed)
+	epochs := rand.Intn(o.Config.MaxEpochs-o.Config.MinEpochs+1) + o.Config.MinEpochs
 	train(o.Network, training, speed, epochs)
 	evaluation := evaluate(o.Usage, o.Network, testing, training, o.RegressionThreshold)
 	if o.Verbose {
@@ -117,6 +109,7 @@ func (o *Online) SetVerbose(verbose bool) {
 	o.Verbose = verbose
 }
 
+// checks if a sample is already in set
 func (o *Online) sampleExists(sample *learn.Sample) bool {
 	if sample.VectorHash == "" {
 		sample.UpdateHashes()
@@ -130,4 +123,14 @@ func (o *Online) sampleExists(sample *learn.Sample) bool {
 // Prints the current evaluation
 func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
+}
+
+// SetConfig sets a new config from outside for the online learner
+func (o *Online) SetConfig(cfg *Config) {
+	o.Config = cfg
+}
+
+// GetConfig returns the current online learner configuration
+func (o *Online) GetConfig() *Config {
+	return o.Config
 }

@@ -24,6 +24,7 @@ func main() {
 	set.AddClass(classLabelN) // class on index 1
 	classes := []string{classLabelY, classLabelN}
 	o := online.NewOnline(neural.Classification, numberOfInputs, []int{hiddenNeurons}, set)
+	// o.SetConfig(&online.Config{}) you can also make use of the Config to fine tune the internals
 	// you can set Verbose to true to gain more insights
 	o.SetVerbose(true)
 	i := 0

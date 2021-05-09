@@ -29,6 +29,7 @@ func main() {
 	onlineSet.AddClass("M")
 
 	o := online.NewOnline(neural.Classification, len(data.Samples[0].Vector), []int{hiddenNeurons}, onlineSet)
+	// o.SetConfig(&online.Config{}) you can also make use of the Config to fine tune the internals
 	o.SetVerbose(true)
 
 	l := len(data.Samples)
