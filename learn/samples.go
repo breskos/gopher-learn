@@ -1,7 +1,5 @@
 package learn
 
-// TODO (abresk) write tests for samples
-
 import (
 	"bufio"
 	"crypto/md5"

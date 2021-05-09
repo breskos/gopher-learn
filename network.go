@@ -20,8 +20,6 @@ const (
 	Distance
 )
 
-// TODO (abresk) write tests for CalculateLabels, CalculateWinnerLabel
-
 // Network contains all the necessary information to use the neural network
 type Network struct {
 	Enters    []*Enter

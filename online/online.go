@@ -27,18 +27,16 @@ const (
 
 // Online contains every necessary for starting the engine
 type Online struct {
-	NetworkInput   int
-	NetworkLayer   []int
-	NetworkOutput  int
-	Data           *learn.Set
-	Network        *neural.Network
-	LastEvaluation *evaluation.Evaluation
-	Verbose        bool
-	Usage          neural.NetworkType
-	AddedPoints    int
-	// TODO(abresk) implement this correct in learn etc
+	NetworkInput        int
+	NetworkLayer        []int
+	NetworkOutput       int
+	Data                *learn.Set
+	Network             *neural.Network
+	LastEvaluation      *evaluation.Evaluation
+	Verbose             bool
+	Usage               neural.NetworkType
+	AddedPoints         int
 	RegressionThreshold float64
-	// TODO(abresk) add measures from the current model here!
 }
 
 // NewOnline creates a new Engine object
@@ -60,8 +58,6 @@ func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *le
 		AddedPoints:   0,
 	}
 }
-
-// TODO(abresk): LoadOnline function that loads a already working online network
 
 // Init initializes the online learner with a short learning upfront
 func (o *Online) Init() float64 {
@@ -120,14 +116,6 @@ func (o *Online) SetVerbose(verbose bool) {
 	o.Verbose = verbose
 }
 
-func train(network *neural.Network, data *learn.Set, learning float64, epochs int) {
-	for e := 0; e < epochs; e++ {
-		for sample := range data.Samples {
-			learn.Learn(network, data.Samples[sample].Vector, data.Samples[sample].Output, learning)
-		}
-	}
-}
-
 func (o *Online) sampleExists(sample *learn.Sample) bool {
 	if sample.VectorHash == "" {
 		sample.UpdateHashes()
@@ -140,36 +128,4 @@ func (o *Online) sampleExists(sample *learn.Sample) bool {
 
 func print(e *evaluation.Evaluation) {
 	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
-}
-
-func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
-	multiplier := 100
-	normalizedRatio := int(ratio * float64(multiplier))
-	var training, evaluation learn.Set
-	training.ClassToLabel = set.ClassToLabel
-	evaluation.ClassToLabel = set.ClassToLabel
-	for i := range set.Samples {
-		if rand.Intn(multiplier) <= normalizedRatio {
-			training.Samples = append(training.Samples, set.Samples[i])
-		} else {
-			evaluation.Samples = append(evaluation.Samples, set.Samples[i])
-		}
-	}
-	return &training, &evaluation
-}
-
-func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
-	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
-	evaluation.SetRegressionThreshold(regressionThreshold)
-	for sample := range test.Samples {
-		evaluation.AddDistance(network, test.Samples[sample].Vector, test.Samples[sample].Output)
-		if neural.Classification == usage {
-			winner := network.CalculateWinnerLabel(test.Samples[sample].Vector)
-			evaluation.Add(test.Samples[sample].Label, winner)
-		} else {
-			prediction := network.Calculate(test.Samples[sample].Vector)
-			evaluation.AddRegression(test.Samples[sample].Value, prediction[0])
-		}
-	}
-	return evaluation
 }

@@ -58,7 +58,6 @@ func (s *Set) GetClasses() []string {
 	return classes
 }
 
-// TODO (abresk) two options: a) remove this function, b) put regression / classifciation add logic here
 func (s *Set) add(vector, output []float64, label string, classNumber int, value float64) {
 	sample := &Sample{}
 	sample.Vector = vector
