@@ -17,17 +17,16 @@ const (
 
 // Online contains every necessary for starting the engine
 type Online struct {
-	NetworkInput        int
-	NetworkLayer        []int
-	NetworkOutput       int
-	Data                *learn.Set
-	Network             *neural.Network
-	LastEvaluation      *evaluation.Evaluation
-	Verbose             bool
-	Usage               neural.NetworkType
-	AddedPoints         int
-	Config              *Config
-	RegressionThreshold float64
+	NetworkInput   int
+	NetworkLayer   []int
+	NetworkOutput  int
+	Data           *learn.Set
+	Network        *neural.Network
+	LastEvaluation *evaluation.Evaluation
+	Verbose        bool
+	Usage          neural.NetworkType
+	AddedPoints    int
+	Config         *Config
 }
 
 // NewOnline creates a new Engine object
@@ -95,7 +94,7 @@ func (o *Online) Iterate() float64 {
 	speed := o.Config.MinLearningSpeed + rand.Float64()*(o.Config.MaxLearningSpeed-o.Config.MinLearningSpeed)
 	epochs := rand.Intn(o.Config.MaxEpochs-o.Config.MinEpochs+1) + o.Config.MinEpochs
 	train(o.Network, training, speed, epochs)
-	evaluation := evaluate(o.Usage, o.Network, testing, training, o.RegressionThreshold)
+	evaluation := evaluate(o.Usage, o.Network, testing, training, o.Config.RegressionThreshold)
 	if o.Verbose {
 		evaluation.PrintConfusionMatrix()
 		evaluation.PrintSummaries()

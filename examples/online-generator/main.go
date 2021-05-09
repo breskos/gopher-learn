@@ -6,8 +6,8 @@ import (
 	"time"
 
 	neural "github.com/breskos/gopher-learn"
-	learn "github.com/breskos/gopher-learn/learn"
-	online "github.com/breskos/gopher-learn/online"
+	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/online"
 )
 
 const (
@@ -15,6 +15,7 @@ const (
 	classLabelN    = "N"
 	numberOfInputs = 7
 	hiddenNeurons  = 30
+	onlineFile     = "online_learner.json"
 )
 
 func main() {
@@ -27,9 +28,8 @@ func main() {
 	// o.SetConfig(&online.Config{}) you can also make use of the Config to fine tune the internals
 	// you can set Verbose to true to gain more insights
 	o.SetVerbose(true)
-	i := 0
 	fmt.Printf("set: %v\n", set)
-	for {
+	for i := 0; i < 2000; i++ {
 		class := rand.Intn(2)
 		classLabel := classes[class]
 		vector, target := createFeatureVector(classLabel)
@@ -43,6 +43,10 @@ func main() {
 			o.Iterate() // this function returns the F-Measure of the current state
 		}
 	}
+	// The functions below allow you to save the state of the Online learner to and to read them from file
+	// in order to continue with the work.
+	// persist.OnlineToFile(onlineFile, o)
+	// o, err := persist.OnlineFromFile(onlineFile)
 }
 
 func createFeatureVector(class string) ([]float64, []float64) {
