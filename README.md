@@ -16,12 +16,7 @@
 ## Install
 
 ```
-  go get github.com/breskos/gopher-learn
-  go get github.com/breskos/gopher-learn/persist
-  go get github.com/breskos/gopher-learn/learn
-  go get github.com/breskos/gopher-learn/engine
-  go get github.com/breskos/gopher-learn/evaluation
-  go get github.com/breskos/gopher-learn/online
+  go get github.com/breskos/gopher-learn/...
 ```
 
 ## The gopher-learn engine
@@ -50,7 +45,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -83,7 +78,7 @@ ok, err := data.LoadFromCSV(dataFile)
 ```go
 e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.nDistance, tries, epochs, trainingSplit, learningRate, decay)
 ```
 
 #### Use evalation mode
@@ -102,22 +97,26 @@ x := net.Calculate(vector)
 
 To let the engine decide for the best model, a few criterias were implemented. They are listed below together with a short regarding their application:
 
-- **CriterionAccuracy** - uses simple accuracy calculation to decide the best model. Not suitable with unbalanced data sets.
-- **CriterionBalancedAccuracy** - uses balanced accuracy. Suitable for unbalanced data sets.
-- **CriterionFMeasure** - uses F1 score. Suitable for unbalanced data sets.
-- **CriterionSimple** - uses simple correct classified divided by all classified samples. Suitable for regression with thresholding.
-- **CriterionDistance** - uses distance between ideal output and current output. Suitable for regression.
+- **Accuracy** - uses simple accuracy calculation to decide the best model. Not suitable with unbalanced data sets.
+- **BalancedAccuracy** - uses balanced accuracy. Suitable for unbalanced data sets.
+- **FMeasure** - uses F1 score. Suitable for unbalanced data sets.
+- **Simple** - uses simple correct classified divided by all classified samples. Suitable for regression with thresholding.
+- **Distance** - uses distance between ideal output and current output. Suitable for regression.
 
 ```go
 ...
 e := engine.NewEngine(neural.Classification, []int{100}, data)
-e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
 ...
 ```
 
 ## Some more basics
 
 ### Train a network using engine
+
+Using the engine makes sense for you if you want to fully use the training framework that gopher-learn offers you.
+With engine package the network is learned using learning rate, decay, epochs.
+Also in the engine you can choose between the criteria options to find the best network.
 
 ```go
 import (
@@ -133,7 +132,7 @@ const (
 	dataFile      = "data.csv"
 	networkFile   = "network.json"
 	tries         = 1
-	epochs        = 100 //100
+	epochs        = 100
 	trainingSplit = 0.7
 	learningRate  = 0.6
 	decay         = 0.005
@@ -148,7 +147,14 @@ func main() {
 	}
 	e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 	e.SetVerbose(true)
-	e.Start(neural.CriterionDistance, tries, epochs, trainingSplit, learningRate, decay)
+	e.SetConfig(&engine.Config{
+		Tries:               tries,
+		Epochs:              epochs,
+		TrainingSplit:       trainingSplit,
+		LearningRate:        learningRate,
+		Decay:               decay,
+	})
+	e.Start(neural.Distance)
 	network, evaluation := e.GetWinner()
 
 	evaluation.PrintSummary("name of class1")

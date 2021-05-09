@@ -5,6 +5,8 @@ import (
 	"math/rand"
 )
 
+// Criterion is needed to decide if the Engine found a better working network.
+// It functions as decider during the training.
 type Criterion int
 
 const (
@@ -39,6 +41,7 @@ func NewNetwork(in int, layers []int, labels map[int]string) *Network {
 	return n
 }
 
+// Initializes the Network with the given layers and activation function.
 func (n *Network) init(in int, layers []int, aFunc ActivationFunction) {
 	n.initLayers(layers)
 	n.initEnters(in)
@@ -47,6 +50,8 @@ func (n *Network) init(in int, layers []int, aFunc ActivationFunction) {
 	n.SetActivationFunction(aFunc)
 }
 
+// Initializes the Layers with the given count of neurons as well as
+// creating all the synapses necessary.
 func (n *Network) initLayers(layers []int) {
 	for _, count := range layers {
 		layer := NewLayer(count)
@@ -54,6 +59,7 @@ func (n *Network) initLayers(layers []int) {
 	}
 }
 
+// Intializes the Enters (size of feature vector) that enters the network.
 func (n *Network) initEnters(in int) {
 	for ; in > 0; in-- {
 		e := NewEnter()
@@ -84,6 +90,7 @@ func (n *Network) SetActivationFunction(aFunc ActivationFunction) {
 	}
 }
 
+// Set the current feature vector for the network
 func (n *Network) setEnters(v *[]float64) {
 	values := *v
 	if len(values) != len(n.Enters) {
@@ -96,18 +103,21 @@ func (n *Network) setEnters(v *[]float64) {
 
 }
 
+// This function sends the current feature vector to the network
 func (n *Network) sendEnters() {
 	for _, e := range n.Enters {
 		e.Signal()
 	}
 }
 
+// Used during forward calculation through the network
 func (n *Network) calculateLayers() {
 	for _, l := range n.Layers {
 		l.Calculate()
 	}
 }
 
+// Generates the output from the neurons
 func (n *Network) generateOut() {
 	outL := n.Layers[len(n.Layers)-1]
 	n.Out = make([]float64, len(outL.Neurons))

@@ -10,6 +10,7 @@ import (
 	"github.com/breskos/gopher-learn/persist"
 )
 
+// Splits a given data set by a given ratio into training and evaluation
 func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	multiplier := 100
 	normalizedRatio := int(ratio * float64(multiplier))
@@ -26,6 +27,7 @@ func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set,
 	return &training, &evaluation
 }
 
+// Trains the neural network with the vgiven samples for a given epoch of time and and learning rate
 func train(network *neural.Network, data *learn.Set, learning float64, epochs int, verbose bool) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
@@ -41,6 +43,7 @@ func train(network *neural.Network, data *learn.Set, learning float64, epochs in
 
 }
 
+// Evaluates the neural network using the current trained versions of it by a given criterion
 func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
 	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
 	evaluation.SetRegressionThreshold(regressionThreshold)
@@ -57,6 +60,7 @@ func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set
 	return evaluation
 }
 
+// Compares two networks by a their evaluation and a given criterion
 func compare(usage neural.NetworkType, criterion neural.Criterion, current *evaluation.Evaluation, try *evaluation.Evaluation) bool {
 	if current.Correct+current.Wrong == 0 {
 		return true
@@ -86,6 +90,7 @@ func compare(usage neural.NetworkType, criterion neural.Criterion, current *eval
 	return false
 }
 
+// Copies a neural network from another
 func copy(from *neural.Network) *neural.Network {
 	return persist.FromDump(persist.ToDump(from))
 }

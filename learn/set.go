@@ -58,6 +58,7 @@ func (s *Set) GetClasses() []string {
 	return classes
 }
 
+// Adds a vector with the corresponding output to the data set
 func (s *Set) add(vector, output []float64, label string, classNumber int, value float64) {
 	sample := &Sample{}
 	sample.Vector = vector
@@ -86,6 +87,7 @@ func (s *Set) AddSample(sample *Sample) error {
 	return nil
 }
 
+// Returns the label from a given class number
 func (s *Set) getLabelFromClass(number int) (string, bool) {
 	if val, ok := s.ClassToLabel[number]; ok {
 		return val, true
@@ -93,6 +95,7 @@ func (s *Set) getLabelFromClass(number int) (string, bool) {
 	return "", false
 }
 
+// Returns the class from the corresponding label
 func (s *Set) getClassFromLabel(label string) (int, bool) {
 	for k, v := range s.ClassToLabel {
 		if v == label {
@@ -102,6 +105,7 @@ func (s *Set) getClassFromLabel(label string) (int, bool) {
 	return -1, false
 }
 
+// Shows the distribution of the data set by the label
 func (s *Set) distributionByLabel(label string) map[string]int {
 	if s.Usage == neural.Classification {
 		dist := make(map[string]int)
@@ -118,6 +122,7 @@ func (s *Set) distributionByLabel(label string) map[string]int {
 	return nil
 }
 
+// Shows the distribution by class number of a the data set
 func (s *Set) distributionByClassNumber(number int) map[int]int {
 	if s.Usage == neural.Classification {
 		dist := make(map[int]int)
@@ -184,6 +189,7 @@ func (s *Set) LoadFromCSV(path string) (bool, error) {
 	return true, nil
 }
 
+// Adds the output vectors for the 2 cases classification or regression
 func (s *Set) addOutputVectors() {
 	if s.Usage == neural.Classification {
 		dim := len(s.ClassToLabel)
@@ -200,6 +206,7 @@ func (s *Set) addOutputVectors() {
 	}
 }
 
+// Creats a class to the label and adding it to the set
 func (s *Set) createClassToLabel(mapping map[string]int) {
 	s.ClassToLabel = make(map[int]string)
 	if neural.Classification == s.Usage {
@@ -285,6 +292,7 @@ func (s *Set) GenerateOutputVector(label string) []float64 {
 	return output
 }
 
+// Returns the class index of a string label
 func (s *Set) getClassIndex(label string) (int, error) {
 	for k, v := range s.ClassToLabel {
 		if label == v {

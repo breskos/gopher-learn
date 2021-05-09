@@ -28,10 +28,17 @@ func main() {
 		fmt.Printf("something went wrong -> %v", err)
 	}
 	e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
-	e.SetRegressionThreshold(regressionThreshold)
 	e.SetVerbose(true)
+	e.SetConfig(&engine.Config{
+		Tries:               tries,
+		Epochs:              epochs,
+		TrainingSplit:       trainingSplit,
+		LearningRate:        learningRate,
+		Decay:               decay,
+		RegressionThreshold: 0.04,
+	})
 	// here we ware choosing Distance because we want the regressor that produces the best examples
-	e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
+	e.Start(neural.Distance)
 	network, evaluation := e.GetWinner()
 
 	// regression evaluation

@@ -8,6 +8,7 @@ import (
 	learn "github.com/breskos/gopher-learn/learn"
 )
 
+// Trains the network with the given Sample set and learning rate
 func train(network *neural.Network, data *learn.Set, learning float64, epochs int) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
@@ -16,6 +17,7 @@ func train(network *neural.Network, data *learn.Set, learning float64, epochs in
 	}
 }
 
+// Splits the set into training and test set
 func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	multiplier := 100
 	normalizedRatio := int(ratio * float64(multiplier))
@@ -32,6 +34,7 @@ func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set,
 	return &training, &evaluation
 }
 
+// Evaluates the network and finds the winner network based on network criterion
 func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
 	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
 	evaluation.SetRegressionThreshold(regressionThreshold)

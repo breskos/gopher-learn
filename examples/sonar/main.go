@@ -28,7 +28,14 @@ func main() {
 	}
 	e := engine.NewEngine(neural.Classification, []int{100}, data)
 	e.SetVerbose(true)
-	e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
+	e.SetConfig(&engine.Config{
+		Tries:         tries,
+		Epochs:        epochs,
+		TrainingSplit: trainingSplit,
+		LearningRate:  learningRate,
+		Decay:         decay,
+	})
+	e.Start(neural.Distance)
 	network, evaluation := e.GetWinner()
 
 	evaluation.PrintSummary("R")

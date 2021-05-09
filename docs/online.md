@@ -54,3 +54,10 @@ o.Inject(sample, false)
 // Iterate returns the current fMeasure which you can use to observe the quality of the network
 fMeasure = o.Iterate()
 ```
+
+
+## Config in Online
+Online comes with a default config.
+For classification tasks the default configuration should fit.
+On the other hand for regression you should set Config that fits your data set.
+Handling of the config is shown in the examples.

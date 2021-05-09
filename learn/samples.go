@@ -48,6 +48,7 @@ func NewRegressionSample(vector []float64, output float64, classLabel string) *S
 	return sample
 }
 
+// Splits the Set based on the given ratio
 func splitSamples(set *Set, ratio float64) (Set, Set) {
 	normalizedRatio := int(ratio * 100.0)
 	firstSet := Set{
@@ -92,11 +93,13 @@ func (s *Sample) GetHash() string {
 	return s.VectorHash + hashSeperator + s.OutputHash
 }
 
+// Calculates a hash value
 func calculateHash(text string) string {
 	hash := md5.Sum([]byte(text))
 	return hex.EncodeToString(hash[:])
 }
 
+// Loads a SVM Problem file
 func problemToMap(problem string) (map[int]float64, string, error) {
 	sliced := strings.Split(problem, " ")
 	m := make(map[int]float64)

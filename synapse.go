@@ -1,13 +1,14 @@
 package neural
 
-// Synapse holds the synapse structure
+// Synapse holds the synapse structure with the weight
+// and the In and Out neuron.
 type Synapse struct {
 	Weight float64
 	In     float64 `json:"-"`
 	Out    float64 `json:"-"`
 }
 
-// NewSynapse creates a new synapse
+// NewSynapse creates a new synapse with the weight
 func NewSynapse(weight float64) *Synapse {
 	return &Synapse{Weight: weight}
 }

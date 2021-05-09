@@ -4,6 +4,7 @@ import (
 	"testing"
 )
 
+// TestLogisticFunc tests the activation function
 func TestLogisticFunc(t *testing.T) {
 	f := NewLogisticFunc(1)
 
