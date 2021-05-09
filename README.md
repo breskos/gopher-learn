@@ -42,10 +42,13 @@ ok, err := data.LoadFromCSV(dataFile)
 
 #### Start engine
 
+This uses the standard config of the engine.
+For finetuning use e.SetConfig() to set your own config.
+
 ```go
 e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance)
 ```
 
 #### Use evalation mode
@@ -75,10 +78,13 @@ ok, err := data.LoadFromCSV(dataFile)
 
 #### Start engine
 
+This uses the standard config of the engine.
+For finetuning use e.SetConfig() to set your own config.
+
 ```go
 e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
 e.SetVerbose(true)
-e.Start(neural.nDistance, tries, epochs, trainingSplit, learningRate, decay)
+e.Start(neural.Distance)
 ```
 
 #### Use evalation mode
