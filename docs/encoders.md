@@ -6,6 +6,16 @@ Autoencoder means that the incoming data is automatically put into a data vector
 Encoding of your data into processable feature vectors is very important.
 This module helps to find a representation of your data without intervention.
 
+## Workflow
+This is the workflow (experimental).
+
+1. Scanner - looks what is suitable for the data set
+2. (Manually) - also manually is working so that some ranges of the input can be grouped or something
+3. (optional) - reducer creates a reduction model for the input
+4. Topic modelling - if the string intput is long - potentially topic modelling can be applied
+5. All things are encoded - start training
+6. TODO: here we need measures to ensure the quality of the training
+
 ## Encoder
 
 The encoders work for different data types:
