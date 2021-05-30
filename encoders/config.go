@@ -11,6 +11,7 @@ type EncoderConfig struct {
 	DictionaryMaxDelimiters int
 	// Application settings
 	NGramMaxGrams        int
+	NGramMaxCapacity     int
 	DefaultStringEncoder EncoderType
 }
 
