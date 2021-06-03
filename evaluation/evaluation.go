@@ -38,9 +38,14 @@ func (e *Evaluation) SetRegressionThreshold(threshold float64) {
 
 // Add adds a new data point to the evaluation
 func (e *Evaluation) Add(labeledClass, predictedClass string) {
-	if _, ok := e.Confusion[labeledClass][predictedClass]; ok {
-		e.Confusion[labeledClass][predictedClass]++
+	if _, ok := e.Confusion[labeledClass]; ok {
+		if _, ok := e.Confusion[labeledClass][predictedClass]; ok {
+			e.Confusion[labeledClass][predictedClass]++
+		} else {
+			e.Confusion[labeledClass][predictedClass] = 1
+		}
 	} else {
+		e.Confusion[labeledClass] = make(map[string]int)
 		e.Confusion[labeledClass][predictedClass] = 1
 	}
 	if labeledClass == predictedClass {
