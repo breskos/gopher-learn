@@ -1,41 +1,39 @@
 package encoders
 
 import (
-	"math"
 	"strings"
 )
 
 // The scanner functions are used to determine whether a set is likely to fit and how many dimensions are
 // suitable for this set of data. Here also the decision is made for a string encoder.
 
-// evaluates if the size of the given sample set is sufficient for the autoencoder.
-// If you just apply float values in the input vector this should be taken for granted.
-// For strings it tells a different story, since one string (regardless how long) is one dimension.
-func evalDimToSamples(dims int, samples int) float64 {
-	if samples < dims {
-		return 0.0
-	}
-	return math.Min(float64(samples)*10.0/float64(dims), 1.0)
-}
-
 // Here the decision for an string encoder is made based on the provided configuration file.
-func evaluateStrings(config *EncoderConfig, values []string) EncoderType {
+func evaluateStrings(config *EncoderConfig, values *Input) EncoderType {
 	maxDelimiters := 0
 	maxStringLength := 0
 	samples := 0
 	uniques := make([]string, 0)
-	for _, v := range values {
-		l := len(strings.Split(v, config.DelimiterToken))
+	uniqueTokens := make(map[string]int)
+	for _, v := range values.Values {
+		tokens := strings.Split(v.String, config.DelimiterToken)
+		for _, v := range tokens {
+			if _, ok := uniqueTokens[v]; ok {
+				uniqueTokens[v]++
+			} else {
+				uniqueTokens[v] = 1
+			}
+		}
+		l := len(tokens)
 		if l > maxDelimiters {
 			maxDelimiters = l
 		}
-		l = len(v)
+		l = len(v.String)
 		if l > maxStringLength {
 			maxStringLength = l
 		}
 		samples++
-		if !contains(uniques, v) {
-			uniques = append(uniques, v)
+		if !contains(uniques, v.String) {
+			uniques = append(uniques, v.String)
 		}
 	}
 	uniqueEntries := len(uniques)
@@ -44,13 +42,14 @@ func evaluateStrings(config *EncoderConfig, values []string) EncoderType {
 	if uniqueEntries <= config.DictionaryMaxEntries && maxDelimiters <= config.DictionaryMaxDelimiters {
 		return StringDictionary
 	}
+	// SplittedDictionary make sense if there are not that much symbols but not just one token.
+	// Also sentences in a small space are possible.
+	if len(uniqueTokens) < config.SplitDictionaryMaxEntries {
+		return StringSplitDictionary
+	}
 	// If there are too much entries to use it as a dictionary, we try to make NGrams out of it.
 	if maxStringLength <= config.NGramsMaxTokens {
 		return StringNGrams
-	}
-	// If NGrams dont match we try to apply topic modelling.
-	if maxDelimiters >= config.TopicModelMinDelimiters {
-		return StringTopics
 	}
 	// If nothing matches we default to NGrams.
 	return config.DefaultStringEncoder
