@@ -2,7 +2,6 @@ package encoders
 
 import (
 	"sort"
-	"strings"
 )
 
 const (
@@ -10,44 +9,61 @@ const (
 )
 
 type NGramModel struct {
-	Dimensions  int
-	Grams       []string
+	Dimensions int
+	// Grams to index in vector
+	GramsLookup map[string]int
+	// Grams to number of appearances
+	Grams       map[string]int
+	Samples     int
 	MaxGrams    int
 	MaxCapacity int
+	CropRatio   float64
+	Quality     float64
 }
 
 func NewNGramModel(config *EncoderConfig) *NGramModel {
 	return &NGramModel{
-		Grams:       make([]string, 0),
+		Grams:       make(map[string]int, 0),
+		GramsLookup: make(map[string]int),
 		MaxGrams:    config.NGramMaxGrams,
 		MaxCapacity: config.NGramMaxCapacity,
+		CropRatio:   config.NGramCropRatio,
 	}
 }
 
-func (m *NGramModel) Fit(dimensions []int, set *Set) {
-	var appearances map[string]int
-	for _, dim := range dimensions {
-		for _, sample := range set.Samples {
-			value := sample.Vector[dim].String
-			value = strings.ToLower(value)
-			l := len(value)
-			for k := range value {
-				if k <= l-DefaultGram {
-					gram := value[k : k+DefaultGram]
-					if _, ok := appearances[gram]; !ok {
-						appearances[gram] = 1
-					} else {
-						appearances[gram]++
-					}
+func (m *NGramModel) Fit(set *Input) {
+	modelIndex := 0
+	for _, sample := range set.Values {
+		m.Samples++
+		value := normalizeString(sample.String)
+		l := len(value)
+		for k := range value {
+			if k <= l-DefaultGram {
+				gram := value[k : k+DefaultGram]
+				if _, ok := m.GramsLookup[gram]; !ok {
+					m.GramsLookup[gram] = modelIndex
+					modelIndex++
+					m.Grams[gram] = 1
+				} else {
+					m.Grams[gram]++
 				}
 			}
 		}
 	}
-	m.set(appearances)
+	m.Dimensions = len(m.Grams)
+	m.optimize()
 }
 
 func (m *NGramModel) CalculateString(s string) []float64 {
-	return []float64{}
+	vector := make([]float64, m.Dimensions)
+	value := normalizeString(s)
+	ngrams := ngramize(value, DefaultGram)
+	for _, gram := range ngrams {
+		if index, ok := m.GramsLookup[gram]; ok {
+			vector[index] = 1.0
+		}
+	}
+	return vector
 }
 
 func (m *NGramModel) GetDimensions() int {
@@ -58,35 +74,32 @@ func (m *NGramModel) CalculateFloats([]float64) []float64 {
 	return []float64{}
 }
 
-func (m *NGramModel) Quality() float64 {
-	return 1.0
-}
-
 func (m *NGramModel) Name() string {
 	return "ngrams"
 }
 
-func (m *NGramModel) set(appearances map[string]int) {
-	l := len(appearances)
-	if m.MaxCapacity > l {
-		for gram := range appearances {
-			m.Grams = append(m.Grams, gram)
-		}
-		m.Dimensions = l
+func (m *NGramModel) GetQuality() float64 {
+	return m.Quality
+}
+
+func (m *NGramModel) optimize() {
+	if m.MaxCapacity >= m.Dimensions {
 		return
 	}
-	// if max capacity is below the apperances we trim down
-	appearances = sortByValue(appearances)
-	i := 0
-	for gram := range appearances {
-		if i < m.MaxCapacity {
-			m.Grams = append(m.Grams, gram)
-		} else {
-			m.Dimensions = len(m.Grams)
-			return
+
+	for gram, appearance := range m.Grams {
+		if float64(appearance)/float64(m.Samples) < m.CropRatio {
+			delete(m.Grams, gram)
 		}
 	}
-
+	// reindex cropped to vector index
+	m.GramsLookup = make(map[string]int)
+	index := 0
+	for gram := range m.Grams {
+		m.GramsLookup[gram] = index
+		index++
+	}
+	m.Dimensions = len(m.Grams)
 }
 
 func sortByValue(m map[string]int) map[string]int {
@@ -94,19 +107,28 @@ func sortByValue(m map[string]int) map[string]int {
 		Key   string
 		Value int
 	}
-
 	var ps []pair
 	for k, v := range m {
 		ps = append(ps, pair{k, v})
 	}
-
 	sort.Slice(ps, func(i, j int) bool {
 		return ps[i].Value > ps[j].Value
 	})
-
-	var sorted map[string]int
+	sorted := make(map[string]int)
 	for _, kv := range ps {
 		sorted[kv.Key] = kv.Value
 	}
 	return sorted
+}
+
+func ngramize(value string, n int) []string {
+	l := len(value)
+	grams := make([]string, 0)
+	for k := range value {
+		if k <= l-n {
+			gram := value[k : k+n]
+			grams = append(grams, gram)
+		}
+	}
+	return grams
 }
