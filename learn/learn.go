@@ -1,6 +1,6 @@
 package learn
 
-import neural "github.com/breskos/gopher-learn"
+import neural "github.com/breskos/gopher-learn/net"
 
 // Deltas holds the deltas from the learner
 type Deltas [][]float64

@@ -3,13 +3,13 @@ package online
 import (
 	"math/rand"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/evaluation"
 	learn "github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/net"
 )
 
 // Trains the network with the given Sample set and learning rate
-func train(network *neural.Network, data *learn.Set, learning float64, epochs int) {
+func train(network *net.Network, data *learn.Set, learning float64, epochs int) {
 	for e := 0; e < epochs; e++ {
 		for sample := range data.Samples {
 			learn.Learn(network, data.Samples[sample].Vector, data.Samples[sample].Output, learning)
@@ -18,7 +18,7 @@ func train(network *neural.Network, data *learn.Set, learning float64, epochs in
 }
 
 // Splits the set into training and test set
-func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
+func split(usage net.NetworkType, set *learn.Set, ratio float64) (*learn.Set, *learn.Set) {
 	multiplier := 100
 	normalizedRatio := int(ratio * float64(multiplier))
 	var training, evaluation learn.Set
@@ -35,12 +35,12 @@ func split(usage neural.NetworkType, set *learn.Set, ratio float64) (*learn.Set,
 }
 
 // Evaluates the network and finds the winner network based on network criterion
-func evaluate(usage neural.NetworkType, network *neural.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
+func evaluate(usage net.NetworkType, network *net.Network, test *learn.Set, train *learn.Set, regressionThreshold float64) *evaluation.Evaluation {
 	evaluation := evaluation.NewEvaluation(usage, train.GetClasses())
 	evaluation.SetRegressionThreshold(regressionThreshold)
 	for sample := range test.Samples {
 		evaluation.AddDistance(network, test.Samples[sample].Vector, test.Samples[sample].Output)
-		if neural.Classification == usage {
+		if net.Classification == usage {
 			winner := network.CalculateWinnerLabel(test.Samples[sample].Vector)
 			evaluation.Add(test.Samples[sample].Label, winner)
 		} else {

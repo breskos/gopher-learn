@@ -1,4 +1,4 @@
-package neural
+package net
 
 // NetworkType represents the type of the neural network in terms of
 // which task the network has. Classification and Regression are implemented.
@@ -9,7 +9,4 @@ const (
 	Classification NetworkType = iota
 	// Regression describes the mode of operation: regression
 	Regression
-
-	// Version of gopher-learn
-	Version = "v0.2"
 )

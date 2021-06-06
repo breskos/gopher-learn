@@ -1,4 +1,4 @@
-package neural
+package net
 
 // Synapse holds the synapse structure with the weight
 // and the In and Out neuron.

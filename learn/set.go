@@ -9,7 +9,7 @@ import (
 	"os"
 	"strconv"
 
-	neural "github.com/breskos/gopher-learn"
+	neural "github.com/breskos/gopher-learn/net"
 )
 
 const (

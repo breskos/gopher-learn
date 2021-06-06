@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"strconv"
 
-	neural "github.com/breskos/gopher-learn"
+	neural "github.com/breskos/gopher-learn/net"
 )
 
 // Weights is used to persist the weights of the network

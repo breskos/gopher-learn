@@ -6,9 +6,9 @@ import (
 	"math/rand"
 	"time"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/evaluation"
 	learn "github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/net"
 )
 
 const (
@@ -21,18 +21,18 @@ type Online struct {
 	NetworkLayer   []int
 	NetworkOutput  int
 	Data           *learn.Set
-	Network        *neural.Network
+	Network        *net.Network
 	LastEvaluation *evaluation.Evaluation
 	Verbose        bool
-	Usage          neural.NetworkType
+	Usage          net.NetworkType
 	AddedPoints    int
 	Config         *Config
 }
 
 // NewOnline creates a new Engine object
-func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *learn.Set) *Online {
+func NewOnline(usage net.NetworkType, inputs int, hiddenLayer []int, data *learn.Set) *Online {
 	var outputLength int
-	if neural.Regression == usage {
+	if net.Regression == usage {
 		outputLength = 1
 	} else {
 		outputLength = len(data.ClassToLabel)
@@ -42,7 +42,7 @@ func NewOnline(usage neural.NetworkType, inputs int, hiddenLayer []int, data *le
 		NetworkOutput: outputLength,
 		NetworkLayer:  hiddenLayer,
 		Data:          data,
-		Network:       neural.BuildNetwork(usage, inputs, hiddenLayer, data.ClassToLabel),
+		Network:       net.BuildNetwork(usage, inputs, hiddenLayer, data.ClassToLabel),
 		Verbose:       false,
 		Usage:         usage,
 		AddedPoints:   0,

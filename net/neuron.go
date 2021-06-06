@@ -1,4 +1,4 @@
-package neural
+package net
 
 // Neuron holds the neuron structure with incoming synapses,
 // outgoing synapses, the activation function of the neuron as well as
