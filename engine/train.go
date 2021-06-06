@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/evaluation"
 	"github.com/breskos/gopher-learn/learn"
+	neural "github.com/breskos/gopher-learn/net"
 	"github.com/breskos/gopher-learn/persist"
 )
 

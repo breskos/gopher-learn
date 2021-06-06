@@ -3,9 +3,9 @@ package engine
 import (
 	"fmt"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/evaluation"
 	"github.com/breskos/gopher-learn/learn"
+	neural "github.com/breskos/gopher-learn/net"
 )
 
 const (

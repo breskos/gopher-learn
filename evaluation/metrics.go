@@ -3,7 +3,7 @@ package evaluation
 import (
 	"math"
 
-	neural "github.com/breskos/gopher-learn"
+	neural "github.com/breskos/gopher-learn/net"
 )
 
 // GetTruePositives returns TP

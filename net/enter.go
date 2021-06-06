@@ -1,4 +1,4 @@
-package neural
+package net
 
 // Enter represents the input vector that comes into the network
 type Enter struct {

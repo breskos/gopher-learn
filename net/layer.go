@@ -1,4 +1,4 @@
-package neural
+package net
 
 // A layer is a structure that holds the neurons with their corresponding
 // synapses. Here also the activation of the neurons is calculated.
