@@ -2,10 +2,26 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.2.5] 2021-06-06
+
+With this version we introduce encoders (automatic encoders) to gopher-learn.
+You now can reduce large float slice inputs or encode your string input right away.
+
+### Added
+- Encoders for float slices and string input.
+- With encoders large float input can be reduced using Spearman.
+- Also with encoders strings can be encoded as ngrams and dictionary (Topic modelling to come soon)
+  
+### Changed
+- Relocated the neural net from neural package into an own package called net
+
+### Fixed
+- Nothing here
+
+
 ## [0.2] - 2021-05-09
  
-Here we write upgrading notes for brands. It's a team effort to make them as
-straightforward as possible.
+Introducing online learning.
  
 ### Added
 - Config for online learner to control learning behavior - easily inject your own config
