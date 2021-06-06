@@ -11,7 +11,42 @@ Although the encoders can be controlled using by Config parameters in EncoderCon
 
 ## EncoderConfig
 
-// TODO(abresk) here we describe all the encoder config values
+The encoder performs decisions during its runtime.
+For that reason a DefaultConfig is applied.
+It is possible to get the DefaultConfig, overwrite specific parameters and apply it again to the encoder.
+
+```go
+e := encoders.NewEncoder("test encoder")
+cfg := encoders.DefaultConfig()
+cfg.DictionaryMaxEntries = 300
+e.Config = cfg
+```
+You can find all possible options for editting the encoder config in encoders/config.go.
+
+## Example
+Below you can find an example for the encoder.
+
+```go
+// generating the encoder, the encoder can hold different input types and dimensions
+e := encoders.NewEncoder("test encoder")
+cfg := encoders.DefaultConfig()
+cfg.DictionaryMaxEntries = 300
+e.Config = cfg
+inputName := "language-classification"
+set := encoders.NewInput(inputName, encoders.String)
+for _, v := range data {
+    // add your strings here
+    set.AddString(someStringSample)
+}
+// scan takes the set and decides (if it is: encoders.Automatic) which encoding to apply
+e.Scan(inputName, set, encoders.Automatic)
+// transform brings the input into the choosen encoding
+e.Transform(inputName, set)
+// explain can be used to see what the encoder has done
+e.Explain()
+// using encode() and an Unified (can be string or float slice) you get the corresponding vector
+vector := e.Encode(inputName, encoders.Unified{String: "Hello whats up with you?", Type: encoders.String})
+```
 
 
 ## Workflow
@@ -25,13 +60,18 @@ This is the workflow. An Encoder can contain different models for encoding. In t
 5. Using - Encode() (namespace) method of the encoder the encode your input.
 
 ## Encoders
+If you have no specific idea which encoder to use you can also run using encoders.Automatic.
+Using this the encoder will figure out by itself which encoding is applicable.
 
 The encoders work for different data types:
-1. N-Grams (strings)
-2. Splitted Dictionary (string)
-3. Dictionary (strings)
-4. FloatExact (numbers)
-5. FloatReducer (numbers)
+
+1. N-Grams (strings), encoders.StringNGrams
+2. Splitted Dictionary (string), encoders.StringSplitDictionary
+3. Dictionary (strings), encoders.StringDictionary
+4. FloatExact (numbers), encoders.FloatExact
+5. FloatReducer (numbers), encoders.FloatReducer
+6. Topic Modelling coming soon (strings) - not implemented yet
+
 
 ## Representation (experimental)
 
