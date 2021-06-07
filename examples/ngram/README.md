@@ -1,9 +1,4 @@
-# Answer Representation
+# NGram
 
-Abstract: TODO
-
-Source of Set: TODO 
-
-## Example
-
-TODO
+This example shows you how to use the NGram encoder for srings.
+If you need more information on the encoders, visit: docs/encoders.md.
