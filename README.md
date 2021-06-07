@@ -12,12 +12,18 @@
 - Rich measurement mechanisms to control the training
 - Examples for fast understanding
 - Can also be used for iterative online learning (using online module) for autonomous agents
+- Encoders can be used to encoder string data or massive float slices
 
 ## Install
 
 ```
   go get github.com/breskos/gopher-learn/...
 ```
+
+## Examples
+
+Find the examples in the examples folder.
+All the data to run the examples [can be found here](https://github.com/breskos/gopher-learn-data).
 
 ## The gopher-learn engine
 
@@ -188,7 +194,7 @@ func main() {
 
 ```go
 
-  import "github.com/breskos/gopher-learn"
+  import "github.com/breskos/gopher-learn/net"
   // Network has 9 enters and 3 layers
   // ( 9 neurons, 9 neurons and 2 neurons).
   // Last layer is network output (2 neurons).
@@ -196,7 +202,7 @@ func main() {
   labels := make(map[int]string)
   labels[0] = "positive"
   labels[1] = "negative"
-  n := neural.NewNetwork(9, []int{9,9,2}, map[int])
+  n := net.NewNetwork(9, []int{9,9,2}, map[int])
   // Randomize sypaseses weights
   n.RandomizeSynapses()
 

@@ -2,6 +2,21 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] 2021-06-07
+
+This version introduces a persitence layer for encoders.
+
+### Added
+- Serialization for encoders
+  
+### Changed
+- Interface of encoders
+- Minor things in the library
+
+### Fixed
+- Some issues with serialization of online, network
+
+
 ## [0.2.5] 2021-06-06
 
 With this version we introduce encoders (automatic encoders) to gopher-learn.

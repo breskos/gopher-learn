@@ -37,12 +37,14 @@ func (e EncoderType) String() string {
 }
 
 type EncoderModel interface {
-	Fit(*Input)
+	Fit(*Input, *EncoderConfig)
 	CalculateString(string) []float64
 	CalculateFloats([]float64) []float64
 	GetDimensions() int
 	GetQuality() float64
 	Name() string
+	ToDump() ([]byte, error)
+	FromDump([]byte) error
 }
 
 type Encoder struct {
@@ -132,21 +134,21 @@ func (e *Encoder) Transform(name string, set *Input) {
 	switch model.Type {
 	case StringDictionary:
 		model.Model = NewDictionaryModel()
-		model.Model.Fit(set)
+		model.Model.Fit(set, e.Config)
 	case StringSplitDictionary:
-		model.Model = NewSplitDictionaryModel(e.Config)
-		model.Model.Fit(set)
+		model.Model = NewSplitDictionaryModel()
+		model.Model.Fit(set, e.Config)
 	case StringNGrams:
-		model.Model = NewNGramModel(e.Config)
-		model.Model.Fit(set)
+		model.Model = NewNGramModel()
+		model.Model.Fit(set, e.Config)
 	case StringTopics:
 		log.Fatal("not implemented")
 	case FloatReducer:
-		model.Model = NewFloatReducerModel(e.Config)
-		model.Model.Fit(set)
+		model.Model = NewFloatReducerModel()
+		model.Model.Fit(set, e.Config)
 	case FloatExact:
 		model.Model = NewFloatExactModel()
-		model.Model.Fit(set)
+		model.Model.Fit(set, e.Config)
 	}
 }
 

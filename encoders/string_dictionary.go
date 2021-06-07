@@ -1,6 +1,9 @@
 package encoders
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type DictionaryModel struct {
 	Dimensions int
@@ -12,7 +15,7 @@ func NewDictionaryModel() *DictionaryModel {
 	return &DictionaryModel{}
 }
 
-func (m *DictionaryModel) Fit(set *Input) {
+func (m *DictionaryModel) Fit(set *Input, config *EncoderConfig) {
 	for _, sample := range set.Values {
 		value := normalizeString(sample.String)
 		fmt.Printf("%s", value)
@@ -47,6 +50,14 @@ func (m *DictionaryModel) Name() string {
 
 func (m *DictionaryModel) GetQuality() float64 {
 	return m.Quality
+}
+
+func (m *DictionaryModel) ToDump() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *DictionaryModel) FromDump(dump []byte) error {
+	return json.Unmarshal(dump, m)
 }
 
 func getIndex(s []string, value string) int {

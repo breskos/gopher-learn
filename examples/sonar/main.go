@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/net"
 	"github.com/breskos/gopher-learn/persist"
 )
 
@@ -21,12 +21,12 @@ const (
 )
 
 func main() {
-	data := learn.NewSet(neural.Classification)
+	data := learn.NewSet(net.Classification)
 	ok, err := data.LoadFromCSV(dataFile)
 	if !ok || nil != err {
 		fmt.Printf("something went wrong -> %v", err)
 	}
-	e := engine.NewEngine(neural.Classification, []int{100}, data)
+	e := engine.NewEngine(net.Classification, []int{100}, data)
 	e.SetVerbose(true)
 	e.SetConfig(&engine.Config{
 		Tries:         tries,
@@ -35,7 +35,7 @@ func main() {
 		LearningRate:  learningRate,
 		Decay:         decay,
 	})
-	e.Start(neural.Distance)
+	e.Start(net.Distance)
 	network, evaluation := e.GetWinner()
 
 	evaluation.PrintSummary("R")

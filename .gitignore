@@ -16,3 +16,5 @@
 
 # specific
 todo
+*.phrase
+*.json

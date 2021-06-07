@@ -18,8 +18,24 @@ type NetworkDump struct {
 	OutLabels map[string]string
 }
 
-// DrumpFromFile loads a NetworkDump from file
-func DumpFromFile(path string) (*NetworkDump, error) {
+// FromFile loads a NetworkDump from File and creates Network out of it
+func FromFile(path string) (*neural.Network, error) {
+	dump, err := dumpFromFile(path)
+	if nil != err {
+		return nil, err
+	}
+	n := FromDump(dump)
+	return n, nil
+}
+
+// ToFile takes a network and creats a NetworkDump out of it and writes it to a file
+func ToFile(path string, n *neural.Network) error {
+	dump := ToDump(n)
+	return dumpToFile(path, dump)
+}
+
+// dumpFromFile loads a NetworkDump from file
+func dumpFromFile(path string) (*NetworkDump, error) {
 	b, err := ioutil.ReadFile(path)
 	if nil != err {
 		return nil, err
@@ -33,24 +49,8 @@ func DumpFromFile(path string) (*NetworkDump, error) {
 	return dump, nil
 }
 
-// FromFile loads a NetworkDump from File and creates Network out of it
-func FromFile(path string) (*neural.Network, error) {
-	dump, err := DumpFromFile(path)
-	if nil != err {
-		return nil, err
-	}
-	n := FromDump(dump)
-	return n, nil
-}
-
-// ToFile takes a network and creats a NetworkDump out of it and writes it to a file
-func ToFile(path string, n *neural.Network) error {
-	dump := ToDump(n)
-	return DumpToFile(path, dump)
-}
-
-// DumpToFile writes a NetworkDump to file
-func DumpToFile(path string, dump *NetworkDump) error {
+// dumpToFile writes a NetworkDump to file
+func dumpToFile(path string, dump *NetworkDump) error {
 	j, err := json.Marshal(dump)
 	if err != nil {
 		return err

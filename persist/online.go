@@ -26,37 +26,22 @@ type OnlineDump struct {
 
 // FromOnlineFile loads a OnlineDump from File and creates Online out of it
 func OnlineFromFile(path string) (*online.Online, error) {
-	dump, err := OnlineDumpFromFile(path)
+	dump, err := onlineDumpFromFile(path)
 	if nil != err {
 		return nil, err
 	}
-	n := FromOnlineDump(dump)
+	n := fromOnlineDump(dump)
 	return n, nil
 }
 
-// DrumpFromOnlineFile loads an OnlineDump from file
-func OnlineDumpFromFile(path string) (*OnlineDump, error) {
-	b, err := ioutil.ReadFile(path)
-	if nil != err {
-		return nil, err
-	}
-	dump := &OnlineDump{}
-	err = json.Unmarshal(b, dump)
-	if nil != err {
-		return nil, err
-	}
-
-	return dump, nil
-}
-
-// ToOnlineFile takes an Online and creates an OnlineDump out of it and writes it to a file
+// OnlineToFile takes a network and creats a NetworkDump out of it and writes it to a file
 func OnlineToFile(path string, n *online.Online) error {
-	dump := ToOnlineDump(n)
-	return DumpToOnlineFile(path, dump)
+	dump := toOnlineDump(n)
+	return dumpToOnlineFile(path, dump)
 }
 
 // FromOnlineDump creates a Online out of an OnlineDump
-func FromOnlineDump(d *OnlineDump) *online.Online {
+func fromOnlineDump(d *OnlineDump) *online.Online {
 	return &online.Online{
 		NetworkInput:   d.NetworkOutput,
 		NetworkLayer:   d.NetworkLayer,
@@ -71,14 +56,8 @@ func FromOnlineDump(d *OnlineDump) *online.Online {
 	}
 }
 
-// ToFile takes a network and creats a NetworkDump out of it and writes it to a file
-func ToOnlineFile(path string, n *online.Online) error {
-	dump := ToOnlineDump(n)
-	return DumpToOnlineFile(path, dump)
-}
-
-// DumpToOnlineFile writes a NetworkDump to file
-func DumpToOnlineFile(path string, dump *OnlineDump) error {
+// dumpToOnlineFile writes a NetworkDump to file
+func dumpToOnlineFile(path string, dump *OnlineDump) error {
 	j, err := json.Marshal(dump)
 	if err != nil {
 		return err
@@ -87,8 +66,23 @@ func DumpToOnlineFile(path string, dump *OnlineDump) error {
 	return err
 }
 
-// ToOnlineDump creates a OnlineDump out of an Online
-func ToOnlineDump(d *online.Online) *OnlineDump {
+// onlineDumpFromFile loads an OnlineDump from file
+func onlineDumpFromFile(path string) (*OnlineDump, error) {
+	b, err := ioutil.ReadFile(path)
+	if nil != err {
+		return nil, err
+	}
+	dump := &OnlineDump{}
+	err = json.Unmarshal(b, dump)
+	if nil != err {
+		return nil, err
+	}
+
+	return dump, nil
+}
+
+// toOnlineDump creates a OnlineDump out of an Online
+func toOnlineDump(d *online.Online) *OnlineDump {
 	return &OnlineDump{
 		NetworkInput:   d.NetworkOutput,
 		NetworkLayer:   d.NetworkLayer,

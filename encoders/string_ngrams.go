@@ -1,6 +1,7 @@
 package encoders
 
 import (
+	"encoding/json"
 	"sort"
 )
 
@@ -13,25 +14,19 @@ type NGramModel struct {
 	// Grams to index in vector
 	GramsLookup map[string]int
 	// Grams to number of appearances
-	Grams       map[string]int
-	Samples     int
-	MaxGrams    int
-	MaxCapacity int
-	CropRatio   float64
-	Quality     float64
+	Grams   map[string]int
+	Samples int
+	Quality float64
 }
 
-func NewNGramModel(config *EncoderConfig) *NGramModel {
+func NewNGramModel() *NGramModel {
 	return &NGramModel{
 		Grams:       make(map[string]int, 0),
 		GramsLookup: make(map[string]int),
-		MaxGrams:    config.NGramMaxGrams,
-		MaxCapacity: config.NGramMaxCapacity,
-		CropRatio:   config.NGramCropRatio,
 	}
 }
 
-func (m *NGramModel) Fit(set *Input) {
+func (m *NGramModel) Fit(set *Input, config *EncoderConfig) {
 	modelIndex := 0
 	for _, sample := range set.Values {
 		m.Samples++
@@ -51,7 +46,7 @@ func (m *NGramModel) Fit(set *Input) {
 		}
 	}
 	m.Dimensions = len(m.Grams)
-	m.optimize()
+	m.optimize(config.NGramMaxCapacity, config.NGramCropRatio)
 }
 
 func (m *NGramModel) CalculateString(s string) []float64 {
@@ -74,6 +69,14 @@ func (m *NGramModel) CalculateFloats([]float64) []float64 {
 	return []float64{}
 }
 
+func (m *NGramModel) ToDump() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *NGramModel) FromDump(dump []byte) error {
+	return json.Unmarshal(dump, m)
+}
+
 func (m *NGramModel) Name() string {
 	return "ngrams"
 }
@@ -82,13 +85,13 @@ func (m *NGramModel) GetQuality() float64 {
 	return m.Quality
 }
 
-func (m *NGramModel) optimize() {
-	if m.MaxCapacity >= m.Dimensions {
+func (m *NGramModel) optimize(maxCapacity int, cropRatio float64) {
+	if maxCapacity >= m.Dimensions {
 		return
 	}
 
 	for gram, appearance := range m.Grams {
-		if float64(appearance)/float64(m.Samples) < m.CropRatio {
+		if float64(appearance)/float64(m.Samples) < cropRatio {
 			delete(m.Grams, gram)
 		}
 	}

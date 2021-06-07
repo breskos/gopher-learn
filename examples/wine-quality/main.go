@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	neural "github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
+	neural "github.com/breskos/gopher-learn/net"
 	"github.com/breskos/gopher-learn/persist"
 )
 
