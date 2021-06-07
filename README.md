@@ -12,6 +12,7 @@
 - Rich measurement mechanisms to control the training
 - Examples for fast understanding
 - Can also be used for iterative online learning (using online module) for autonomous agents
+- Encoders can be used to encoder string data or massive float slices
 
 ## Install
 
