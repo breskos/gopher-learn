@@ -1,5 +1,7 @@
 package encoders
 
+import "encoding/json"
+
 type FloatExactModel struct {
 	Dimensions int
 	Quality    float64
@@ -9,7 +11,7 @@ func NewFloatExactModel() *FloatExactModel {
 	return &FloatExactModel{}
 }
 
-func (m *FloatExactModel) Fit(set *Input) {
+func (m *FloatExactModel) Fit(set *Input, config *EncoderConfig) {
 	m.Dimensions = len(set.Values[0].Float)
 }
 
@@ -23,6 +25,14 @@ func (m *FloatExactModel) GetDimensions() int {
 
 func (m *FloatExactModel) CalculateFloats(value []float64) []float64 {
 	return value
+}
+
+func (m *FloatExactModel) ToDump() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *FloatExactModel) FromDump(dump []byte) error {
+	return json.Unmarshal(dump, m)
 }
 
 func (m *FloatExactModel) Name() string {

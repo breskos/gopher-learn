@@ -1,6 +1,7 @@
 package encoders
 
 import (
+	"encoding/json"
 	"log"
 	"math"
 
@@ -20,17 +21,15 @@ type FloatReducerModel struct {
 	Model      map[int]bool
 	Dimensions int
 	Quality    float64
-	Config     *EncoderConfig
 }
 
-func NewFloatReducerModel(config *EncoderConfig) *FloatReducerModel {
+func NewFloatReducerModel() *FloatReducerModel {
 	return &FloatReducerModel{
-		Model:  make(map[int]bool),
-		Config: config,
+		Model: make(map[int]bool),
 	}
 }
 
-func (m *FloatReducerModel) Fit(set *Input) {
+func (m *FloatReducerModel) Fit(set *Input, config *EncoderConfig) {
 	if len(set.Values) < 1 {
 		log.Fatalf("no values delivered for fit")
 	}
@@ -48,7 +47,7 @@ func (m *FloatReducerModel) Fit(set *Input) {
 			if i != j {
 				rs, _ := analysis.Spearman(dimensions[i], dimensions[j])
 				spearman[i][j] = rs
-				if math.Abs(rs) > math.Abs(m.Config.FloatReducerSpearman) {
+				if math.Abs(rs) > math.Abs(config.FloatReducerSpearman) {
 					m.Model[i] = false
 				}
 			}
@@ -60,7 +59,7 @@ func (m *FloatReducerModel) Fit(set *Input) {
 	}
 	for i := range spearman {
 		for j := range spearman[i] {
-			if spearman[i][j] >= m.Config.FloatReducerSpearman && m.Model[i] && m.Model[j] {
+			if spearman[i][j] >= config.FloatReducerSpearman && m.Model[i] && m.Model[j] {
 				m.Model[i] = false
 			}
 		}
@@ -97,6 +96,14 @@ func (m *FloatReducerModel) CalculateString(s string) []float64 {
 
 func (m *FloatReducerModel) GetQuality() float64 {
 	return m.Quality
+}
+
+func (m *FloatReducerModel) ToDump() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *FloatReducerModel) FromDump(dump []byte) error {
+	return json.Unmarshal(dump, m)
 }
 
 func similarValues(values []float64) bool {

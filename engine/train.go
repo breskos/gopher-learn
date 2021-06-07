@@ -91,6 +91,7 @@ func compare(usage neural.NetworkType, criterion neural.Criterion, current *eval
 }
 
 // Copies a neural network from another
+// This function is very costly.
 func copy(from *neural.Network) *neural.Network {
 	return persist.FromDump(persist.ToDump(from))
 }

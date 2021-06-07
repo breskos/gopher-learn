@@ -11,6 +11,7 @@ import (
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
 	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/persist"
 )
 
 const (
@@ -39,6 +40,15 @@ func main() {
 	e.Scan(modelName, set, encoders.Automatic)
 	e.Transform(modelName, set)
 	e.Explain()
+
+	// this is just an example how to persist the encoders
+	persist.EncoderToFile("encoder.json", e)
+	e2, err := persist.EncoderFromFile("encoder.json")
+	if err != nil {
+		log.Fatalf("error persisting encoder: %v", err)
+	}
+	fmt.Println("after persisting")
+	e2.Explain()
 
 	// TODO(abresk) here I noticed that Sample, Set in learn are not optimized to be used in this manner
 	// They were designed to load samples from file.
@@ -80,19 +90,19 @@ func main() {
 	evaluation.PrintSummary("LIST")
 
 	// testing with own example
-	vector := e.Encode(modelName, encoders.Unified{String: "Wieviel Saft ist drin?"})
+	vector := e2.Encode(modelName, encoders.Unified{String: "Wieviel Saft ist drin?"})
 	w := network.CalculateWinnerLabel(vector)
 	fmt.Printf("%v -> %v\n", "FACT", w)
 
-	vector = e.Encode(modelName, encoders.Unified{String: "Welche Optionen gibt es um einen Org zu besiegen?"})
+	vector = e2.Encode(modelName, encoders.Unified{String: "Welche Optionen gibt es um einen Org zu besiegen?"})
 	w = network.CalculateWinnerLabel(vector)
 	fmt.Printf("%v -> %v\n", "LIST", w)
 
-	vector = e.Encode(modelName, encoders.Unified{String: "Was ist ein Haus?"})
+	vector = e2.Encode(modelName, encoders.Unified{String: "Was ist ein Haus?"})
 	w = network.CalculateWinnerLabel(vector)
 	fmt.Printf("%v -> %v\n", "PARAGRAPH", w)
 
-	vector = e.Encode(modelName, encoders.Unified{String: "Woraus besteht ein Garten?"})
+	vector = e2.Encode(modelName, encoders.Unified{String: "Woraus besteht ein Garten?"})
 	w = network.CalculateWinnerLabel(vector)
 	fmt.Printf("%v -> %v\n", "LIST", w)
 
