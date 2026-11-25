@@ -82,6 +82,9 @@ func accuracy(n *Network, d Data) float64 {
 }
 
 func TestFitSpiralsWithAdam(t *testing.T) {
+	if testing.Short() {
+		t.Skip("trains a real model")
+	}
 	rng := rand.New(rand.NewPCG(3, 3))
 	train, val := spirals(rng, 1500), spirals(rng, 500)
 	// tanh + softmax with SGD at a high learning rate gets stuck; Adam does not.

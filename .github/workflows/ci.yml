@@ -20,7 +20,12 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out $(go list ./... | grep -v /examples/)
+      # The race detector slows training down about tenfold, so it checks the
+      # fast tests; the quality tests that train real models run without it.
+      - name: Race detector (short tests)
+        run: go test -race -short $(go list ./... | grep -v /examples/)
+      - name: All tests with coverage
+        run: go test -coverprofile=coverage.out $(go list ./... | grep -v /examples/)
       - name: Check coverage
         run: |
           total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $3); print $3 }')
