@@ -11,17 +11,33 @@ import (
 	"github.com/breskos/gopher-learn/nn"
 )
 
-// All returns every data set in a stable order.
+// Folders lists the output folders in order, each with the purpose of its data sets.
+var Folders = []struct{ Name, Purpose string }{
+	{"classification", "Batch classification: train with engine.New and evaluate on a held-out split."},
+	{"regression", "Batch regression with targets in [0, 1]: train with engine.New, standardize the features with learn.FitScaler."},
+	{"online", "Streams for online learning: read the rows in order and feed them to online.Online one by one. The concept column (where present) tells which concept generated a row; ignore it for training and use it to evaluate drift detection."},
+	{"text", "Short texts for the string encoders (encoders.New with dictionary, split dictionary or n-grams)."},
+	{"loading", "Edge cases for the loaders: delimiters, ignored columns, missing values and sparse LIBSVM files."},
+	{"benchmark", "Larger files for performance measurements."},
+}
+
+// All returns every data set, grouped by folder.
 func All() []Dataset {
 	sets := []Dataset{
 		blobs(), imbalanced(), spirals(), highDim(),
 		friedman1(), unscaled(),
-		drift(),
+		drift(), gradualDrift(), recurringConcepts(), incrementalDrift(),
 		intents(),
 		messySemicolon(), messyMissing(), sparseSVM(),
 		large(),
 	}
-	return append(sets, sensors()...)
+	sets = append(sets, sensors()...)
+	rank := map[string]int{}
+	for i, f := range Folders {
+		rank[f.Name] = i
+	}
+	slices.SortStableFunc(sets, func(a, b Dataset) int { return rank[a.Folder()] - rank[b.Folder()] })
+	return sets
 }
 
 func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
@@ -247,18 +263,19 @@ func unscaled() Dataset {
 
 func drift() Dataset {
 	return Dataset{
-		Path: "stream/drift.csv",
+		Path: "online/abrupt-drift.csv",
 		Description: "A stream for online learning with an abrupt concept drift in the middle. x1–x4 are uniform in [-1, 1]; " +
 			"in the first half the label is A if x1 + x2 > 0, in the second half if x1 - x2 > 0. x3 and x4 are noise and 5 % of the labels are flipped. " +
-			"Read the rows in order; the t column is the time step and must be ignored.",
+			"Read the rows in order; t is the time step and concept (1 or 2) the rule that generated the row. Ignore both for training.",
 		Task:     nn.Classification,
 		Rows:     100_000,
-		Header:   []string{"t", "x1", "x2", "x3", "x4", "label"},
+		Header:   []string{"t", "x1", "x2", "x3", "x4", "concept", "label"},
 		Target:   "label",
-		Ignore:   []string{"t"},
+		Ignore:   []string{"t", "concept"},
 		Loadable: true,
+		Ordered:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
-			row := make([]string, 6)
+			row := make([]string, 7)
 			for t := range n {
 				var x [4]float64
 				for i := range x {
@@ -275,9 +292,13 @@ func drift() Dataset {
 				for i, v := range x {
 					row[i+1] = num(v)
 				}
-				row[5] = "B"
+				row[5] = "1"
+				if t >= n/2 {
+					row[5] = "2"
+				}
+				row[6] = "B"
 				if a {
-					row[5] = "A"
+					row[6] = "A"
 				}
 				if err := emit(row); err != nil {
 					return err
@@ -354,7 +375,7 @@ var intentSlotOrder = []string{"{name}", "{daytime}", "{when}", "{city}", "{coun
 func messySemicolon() Dataset {
 	species := []string{"Art A", "Art B", "Art C"}
 	return Dataset{
-		Path: "messy/semicolon.csv",
+		Path: "loading/semicolon.csv",
 		Description: "A CSV as exported by German spreadsheet tools: semicolon delimiter, an id column, column names with spaces and umlauts, " +
 			"and labels with spaces. Load it with learn.WithComma(';'), learn.WithTarget(\"Art\") and learn.WithIgnore(\"id\").",
 		Task:     nn.Classification,
@@ -384,7 +405,8 @@ func messySemicolon() Dataset {
 
 func messyMissing() Dataset {
 	return Dataset{
-		Path: "messy/missing-values.csv",
+		Path:         "loading/missing-values.csv",
+		AllowMissing: true,
 		Description: "Like blobs but with 2 % empty fields. learn.Set.ReadCSV rejects it with a \"missing value\" error that names the column; " +
 			"it is the test case for a future imputation feature.",
 		Task:   nn.Classification,
@@ -414,7 +436,7 @@ func messyMissing() Dataset {
 func sparseSVM() Dataset {
 	const features, active = 1000, 10
 	return Dataset{
-		Path: "messy/sparse.svm",
+		Path: "loading/sparse.svm",
 		Description: "Sparse LIBSVM data with 1,000 features and about 10 non-zero values per row. The label (+1/-1) is the sign of a weighted sum " +
 			"of the active features. Load it with learn.Set.LoadSVM.",
 		Task:   nn.Classification,
@@ -459,7 +481,7 @@ func sparseSVM() Dataset {
 func large() Dataset {
 	const features, informative = 20, 8
 	return Dataset{
-		Path: "large/benchmark.csv",
+		Path: "benchmark/large.csv",
 		Description: "A larger binary classification set for performance measurements: 20 standard normal features, " +
 			"the label is drawn from a logistic model on x1–x8 (x9–x20 are noise).",
 		Task:     nn.Classification,

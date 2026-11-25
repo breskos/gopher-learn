@@ -127,15 +127,15 @@ func TestSensorQuality(t *testing.T) {
 		t.Skip("quality tests train real models")
 	}
 	cases := []qualityCase{
-		{path: "sensors/predictive-maintenance.csv", min: 0.90, measure: accuracy}, // measured 0.975
-		{path: "sensors/activity.csv", min: 0.90, measure: accuracy},               // measured 0.986
-		{path: "sensors/room-climate.csv", min: 0.95, measure: accuracy},           // measured 0.995
-		{path: "sensors/sensor-health.csv", min: 0.75, measure: balancedAccuracy},  // measured 0.883
-		{path: "sensors/wifi-localization.csv", min: 0.95, measure: accuracy},      // measured 0.984
+		{path: "classification/predictive-maintenance.csv", min: 0.90, measure: accuracy}, // measured 0.975
+		{path: "classification/activity.csv", min: 0.90, measure: accuracy},               // measured 0.986
+		{path: "online/room-occupancy.csv", min: 0.95, measure: accuracy},                 // measured 0.995
+		{path: "online/sensor-health.csv", min: 0.75, measure: balancedAccuracy},          // measured 0.883
+		{path: "classification/wifi-localization.csv", min: 0.95, measure: accuracy},      // measured 0.984
 		// regression: share of predictions within 0.05 of the target
-		{path: "sensors/run-to-failure.csv", min: 0.60, measure: accuracy},          // measured 0.701
-		{path: "sensors/air-quality-calibration.csv", min: 0.85, measure: accuracy}, // measured 0.945
-		{path: "sensors/smart-meter.csv", min: 0.60, measure: accuracy},             // measured 0.751
+		{path: "regression/run-to-failure.csv", min: 0.60, measure: accuracy},          // measured 0.701
+		{path: "regression/air-quality-calibration.csv", min: 0.85, measure: accuracy}, // measured 0.945
+		{path: "regression/smart-meter.csv", min: 0.60, measure: accuracy},             // measured 0.751
 	}
 	for _, c := range cases {
 		c.rows, c.hidden, c.scale, c.cfg = 4000, []int{24}, true, sensorConfig

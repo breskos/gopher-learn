@@ -23,6 +23,7 @@ func sensors() []Dataset {
 		sensorHealth(),
 		wifiLocalization(),
 		smartMeter(),
+		airQualityAging(),
 	}
 }
 
@@ -51,7 +52,7 @@ var vibrationHeader = []string{"rpm", "temperature_c", "rms_g", "peak_g", "crest
 func predictiveMaintenance() Dataset {
 	states := []string{"normal", "imbalance", "misalignment", "bearing_fault"}
 	return Dataset{
-		Path: "sensors/predictive-maintenance.csv",
+		Path: "classification/predictive-maintenance.csv",
 		Description: "Condition monitoring of electric motors with an accelerometer at the bearing (e.g. ADXL345), a temperature probe and the speed. " +
 			"Each row is one window: overall RMS and peak acceleration, crest factor, kurtosis and the spectral amplitudes at the rotation frequency (1x), " +
 			"twice the rotation frequency (2x) and the bearing outer race fault frequency (BPFO). " +
@@ -63,6 +64,7 @@ func predictiveMaintenance() Dataset {
 		Target:   "state",
 		Ignore:   []string{"machine"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			for range n {
 				machine := rng.IntN(40)
@@ -105,7 +107,7 @@ func predictiveMaintenance() Dataset {
 
 func runToFailure() Dataset {
 	return Dataset{
-		Path: "sensors/run-to-failure.csv",
+		Path: "regression/run-to-failure.csv",
 		Description: "Bearings run until failure. Every machine has a random life of 800 to 2,000 operating hours and is measured every 10 hours. " +
 			"Wear grows slowly at first and accelerates towards the end (health = (hours / life)^2.5): BPFO amplitude, kurtosis and temperature rise. " +
 			"The target rul is the remaining useful life as a fraction of the total life (1 = new, 0 = failed). The machine column must be ignored; " +
@@ -116,6 +118,7 @@ func runToFailure() Dataset {
 		Target:   "rul",
 		Ignore:   []string{"machine"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			machine, hours, life, rpm := 0, 0.0, 0.0, 0.0
 			for range n {
@@ -166,7 +169,7 @@ func activity() Dataset {
 		"acc_mean_x", "acc_mean_y", "acc_mean_z", "acc_std_x", "acc_std_y", "acc_std_z",
 		"acc_mag_std", "acc_dom_freq_hz", "gyro_std_x", "gyro_std_y", "gyro_std_z", "gyro_mag_mean", "activity"}
 	return Dataset{
-		Path: "sensors/activity.csv",
+		Path: "classification/activity.csv",
 		Description: "Human activity recognition with a smartphone in the trouser pocket (3-axis accelerometer in g and gyroscope in rad/s, e.g. MPU-6050, 50 Hz). " +
 			"Each row summarizes a 2.56 s window: mean and standard deviation per axis, the standard deviation of the magnitude, the dominant step frequency " +
 			"and the gyroscope activity. Seven activities: walking, running, upstairs, downstairs, cycling, sitting, standing. " +
@@ -178,6 +181,7 @@ func activity() Dataset {
 		Target:   "activity",
 		Ignore:   []string{"user"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			type user struct{ pace, intensity, tilt float64 }
 			users := make([]user, 30)
@@ -225,7 +229,7 @@ func activity() Dataset {
 func roomClimate() Dataset {
 	header := []string{"timestamp", "hour", "weekday", "temperature_c", "humidity_pct", "pressure_hpa", "co2_ppm", "light_lux", "motion_events", "people", "occupied"}
 	return Dataset{
-		Path: "sensors/room-climate.csv",
+		Path: "online/room-occupancy.csv",
 		Description: "An office room measured every 5 minutes (e.g. BME280 for temperature, humidity and pressure, SCD30 for CO2, a light sensor and a PIR motion sensor), " +
 			"starting 2025-01-01. People come on working days roughly from 8:00 to 18:00 with a lunch break, sometimes stay late or come on a weekend. " +
 			"CO2 rises with every person and falls with ventilation and open windows, people warm the room and add humidity, lamps go on when someone is there, " +
@@ -238,6 +242,8 @@ func roomClimate() Dataset {
 		Target:   "occupied",
 		Ignore:   []string{"timestamp", "people"},
 		Loadable: true,
+		Applied:  true,
+		Ordered:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			co2, temp, hum, pressure := 450.0, 20.0, 40.0, 1013.0
 			people, windowOpen := 0, 0
@@ -332,7 +338,7 @@ func roomClimate() Dataset {
 func airQualityCalibration() Dataset {
 	header := []string{"timestamp", "hour", "month", "raw_pm25", "temperature_c", "humidity_pct", "raw_no2", "pm25_reference"}
 	return Dataset{
-		Path: "sensors/air-quality-calibration.csv",
+		Path: "regression/air-quality-calibration.csv",
 		Description: "Calibration of a low-cost optical particle sensor (e.g. SDS011) against a reference instrument, one row per hour for a year. " +
 			"The true PM2.5 concentration follows the seasons (higher in winter), rush hours and occasional pollution episodes. " +
 			"The low-cost sensor has a gain error and overestimates strongly at high humidity (up to about five times) because particles absorb water; " +
@@ -344,6 +350,7 @@ func airQualityCalibration() Dataset {
 		Target:   "pm25_reference",
 		Ignore:   []string{"timestamp"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			episode := 0.0
 			gain := 1.3 + rng.NormFloat64()*0.05
@@ -387,7 +394,7 @@ func sensorHealth() Dataset {
 	states := []string{"ok", "drift", "stuck", "spikes", "dropout", "noisy"}
 	header := []string{"t", "mean_c", "std_c", "min_c", "max_c", "slope_c_per_min", "diff_to_redundant_c", "missing_samples", "state"}
 	return Dataset{
-		Path: "sensors/sensor-health.csv",
+		Path: "online/sensor-health.csv",
 		Description: "Health of an industrial temperature probe (e.g. PT100) in a process with setpoint changes, monitored together with a redundant second probe. " +
 			"Each row summarizes one minute of 1 Hz readings: mean, standard deviation, min, max, slope, the difference to the redundant probe and the number of missing samples. " +
 			"Faults occur as episodes of varying length: drift (slowly growing offset), stuck (frozen value), spikes (single outliers), dropout (missing samples) and noisy (electrical noise). " +
@@ -398,6 +405,8 @@ func sensorHealth() Dataset {
 		Target:   "state",
 		Ignore:   []string{"t"},
 		Loadable: true,
+		Applied:  true,
+		Ordered:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			setpoint, process := 80.0, 80.0
 			state, left, driftOffset, stuckValue := 0, 200, 0.0, 0.0
@@ -473,7 +482,7 @@ func wifiLocalization() Dataset {
 	aps := [][2]float64{{5, 5}, {20, 2}, {35, 5}, {5, 15}, {22, 18}, {35, 15}}
 	header := []string{"device", "ap1_dbm", "ap2_dbm", "ap3_dbm", "ap4_dbm", "ap5_dbm", "ap6_dbm", "room"}
 	return Dataset{
-		Path: "sensors/wifi-localization.csv",
+		Path: "classification/wifi-localization.csv",
 		Description: "Indoor localization from Wi-Fi signal strength. An office floor of 40 m x 20 m has eight rooms (R1–R8, a 4 x 2 grid) and six access points. " +
 			"The received signal strength follows a log-distance path loss model (-35 dBm at 1 m, exponent 2.8), loses 6 dB per wall crossed, " +
 			"varies with log-normal shadowing (4 dB) and differs by up to ±4 dB between the five device models. Signals below -95 dBm are reported as -100. " +
@@ -484,6 +493,7 @@ func wifiLocalization() Dataset {
 		Target:   "room",
 		Ignore:   []string{"device"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			offsets := make([]float64, 5)
 			for i := range offsets {
@@ -517,7 +527,7 @@ func wifiLocalization() Dataset {
 func smartMeter() Dataset {
 	header := []string{"timestamp", "hour", "weekday", "month", "temperature_c", "load_lag_24h_kw", "load_lag_168h_kw", "anomaly", "load_kw"}
 	return Dataset{
-		Path: "sensors/smart-meter.csv",
+		Path: "regression/smart-meter.csv",
 		Description: "Hourly electricity consumption of a household with an electric heat pump, as read from a smart meter, for two years. " +
 			"Consumption has a base load, morning and evening peaks, more use on weekends, extra heating below 15 °C, random appliance runs and holidays away. " +
 			"Inputs are the calendar, the outdoor temperature and the consumption 24 and 168 hours earlier (forecasting the next hour). " +
@@ -529,6 +539,7 @@ func smartMeter() Dataset {
 		Target:   "load_kw",
 		Ignore:   []string{"timestamp", "anomaly"},
 		Loadable: true,
+		Applied:  true,
 		generate: func(rng *rand.Rand, n int, emit func([]string) error) error {
 			const warmup = 168
 			history := make([]float64, 0, n+warmup)

@@ -14,6 +14,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 
 	"github.com/breskos/gopher-learn/learn"
 	"github.com/breskos/gopher-learn/nn"
@@ -49,6 +50,13 @@ type Dataset struct {
 	Comma rune
 	// Loadable reports whether learn.Set.ReadCSV can load the file.
 	Loadable bool
+	// Ordered marks streams whose rows must be read in order (online learning).
+	Ordered bool
+	// Applied marks data sets that model real sensors rather than a
+	// mathematical benchmark.
+	Applied bool
+	// AllowMissing marks data sets that contain empty fields on purpose.
+	AllowMissing bool
 
 	generate func(rng *rand.Rand, n int, emit func([]string) error) error
 }
@@ -133,4 +141,10 @@ func featureNames(n int) []string {
 		names[i] = "x" + strconv.Itoa(i+1)
 	}
 	return names
+}
+
+// Folder returns the top-level folder of the data set.
+func (d Dataset) Folder() string {
+	folder, _, _ := strings.Cut(d.Path, "/")
+	return folder
 }

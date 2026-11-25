@@ -1,0 +1,115 @@
+package synthetic
+
+import (
+	"io/fs"
+	"math"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"testing"
+)
+
+// TestDatasets reads every file completely and checks it against its
+// metadata: row count, header, numeric features, targets and ordering.
+func TestDatasets(t *testing.T) {
+	for _, d := range Datasets {
+		t.Run(d.Path, func(t *testing.T) {
+			rows, missing := 0, 0
+			targets := map[string]int{}
+			lastT := -1
+			lastStamp := ""
+			err := d.Read(".", func(r Record) error {
+				rows++
+				if r.Target == "" {
+					t.Fatalf("row %d: empty target", rows)
+				}
+				targets[r.Target]++
+				switch d.Format {
+				case CSV:
+					if len(r.Features) != len(d.Features()) {
+						t.Fatalf("row %d: %d features, want %d", rows, len(r.Features), len(d.Features()))
+					}
+					for _, v := range r.Features {
+						if math.IsNaN(v) {
+							missing++
+						} else if math.IsInf(v, 0) {
+							t.Fatalf("row %d: infinite value", rows)
+						}
+					}
+				case LIBSVM:
+					if len(r.Sparse) == 0 {
+						t.Fatalf("row %d: no features", rows)
+					}
+					for i := range r.Sparse {
+						if i < 1 {
+							t.Fatalf("row %d: index %d below 1", rows, i)
+						}
+					}
+				case Phrase:
+					if r.Text == "" {
+						t.Fatalf("row %d: empty text", rows)
+					}
+				}
+				if d.Task == "regression" {
+					v, err := strconv.ParseFloat(r.Target, 64)
+					if err != nil || v < 0 || v > 1 {
+						t.Fatalf("row %d: regression target %q not in [0, 1]", rows, r.Target)
+					}
+				}
+				if d.Ordered {
+					if s, ok := r.Ignored["t"]; ok {
+						ti, err := strconv.Atoi(s)
+						if err != nil || ti <= lastT {
+							t.Fatalf("row %d: time step %q not increasing", rows, s)
+						}
+						lastT = ti
+					}
+					if s, ok := r.Ignored["timestamp"]; ok {
+						if s < lastStamp {
+							t.Fatalf("row %d: timestamp %s before %s", rows, s, lastStamp)
+						}
+						lastStamp = s
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rows != d.Rows {
+				t.Errorf("%d rows, want %d", rows, d.Rows)
+			}
+			if d.AllowMissing != (missing > 0) {
+				t.Errorf("%d missing values, AllowMissing is %v", missing, d.AllowMissing)
+			}
+			if d.Task == "classification" && len(targets) < 2 {
+				t.Errorf("only %d distinct labels", len(targets))
+			}
+		})
+	}
+}
+
+// TestCatalogComplete checks that every data file is listed in Datasets.
+func TestCatalogComplete(t *testing.T) {
+	var files []string
+	err := filepath.WalkDir(".", func(path string, e fs.DirEntry, err error) error {
+		if err != nil || e.IsDir() || filepath.Dir(path) == "." {
+			return err
+		}
+		files = append(files, filepath.ToSlash(path))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if _, ok := Lookup(f); !ok {
+			t.Errorf("%s is not listed in Datasets", f)
+		}
+	}
+	for _, d := range Datasets {
+		if !slices.Contains(files, d.Path) {
+			t.Errorf("%s is listed but missing", d.Path)
+		}
+	}
+}

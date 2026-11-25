@@ -90,7 +90,7 @@ func TestLoadable(t *testing.T) {
 }
 
 func TestSparseSVM(t *testing.T) {
-	d, err := ByPath("messy/sparse.svm")
+	d, err := ByPath("loading/sparse.svm")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSparseSVM(t *testing.T) {
 }
 
 func TestMissingValuesRejected(t *testing.T) {
-	d, _ := ByPath("messy/missing-values.csv")
+	d, _ := ByPath("loading/missing-values.csv")
 	err := learn.NewSet(nn.Classification).ReadCSV(bytes.NewReader(generate(t, d, 1000, 1)), learn.WithHeader())
 	if err == nil || !strings.Contains(err.Error(), "missing value") {
 		t.Fatalf("want missing value error, got %v", err)
@@ -144,7 +144,7 @@ func TestImbalancedRatio(t *testing.T) {
 }
 
 func TestDriftChangesConcept(t *testing.T) {
-	d, _ := ByPath("stream/drift.csv")
+	d, _ := ByPath("online/abrupt-drift.csv")
 	s, err := d.Set(4000, 1)
 	if err != nil {
 		t.Fatal(err)
