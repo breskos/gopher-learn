@@ -1,13 +1,13 @@
 # Examples for gopher-learn
 
-![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png " The Gopher Neural logo ")
+![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png "The gopher-learn logo")
 
 ## Important
 All the data needed for the examples can be found at [gopher-learn-data](https://github.com/breskos/gopher-learn-data).
 
 ## Sonar
 
-Basic example that uses the engine of gopher-neural to train a small neural network with basic parameters.
+Basic example that uses the engine of gopher-learn to train a small neural network with basic parameters.
 More information in sonar ReadMe file.
 Data from: https://archive.ics.uci.edu/ml/datasets/Connectionist+Bench+%28Sonar%2C+Mines+vs.+Rocks%29
 

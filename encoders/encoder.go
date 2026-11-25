@@ -1,160 +1,233 @@
+// Package encoders turns raw inputs (strings and float slices) into feature
+// vectors for neural networks.
+//
+// An Encoder holds one fitted Model per named input dimension. Scan decides
+// which model to use (automatically or explicitly), Fit learns the model from
+// sample data and Encode converts new values.
 package encoders
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
+	"io"
+	"slices"
+	"strings"
 )
 
-type EncoderType int
+// ErrUnknownDimension is returned for a dimension name the encoder does not know.
+var ErrUnknownDimension = errors.New("encoders: unknown dimension")
+
+// Type selects an encoding model.
+type Type int
 
 const (
-	// Automatic means that the encoder decides based on heuristics what to do
-	Automatic EncoderType = iota
-	// StringDictionary uses exact matches on strings as dictionary approach
+	// Automatic lets Scan pick a model based on heuristics.
+	Automatic Type = iota
+	// StringDictionary one-hot encodes whole (normalized) strings.
 	StringDictionary
-	// StringSplittedDictionary
+	// StringSplitDictionary multi-hot encodes the tokens of a string.
 	StringSplitDictionary
-	// StringTopics uses topic modelling on strings
-	StringTopics
-	// StringNGrams uses N-Gram modelling on strings
+	// StringNGrams multi-hot encodes the character n-grams of a string.
 	StringNGrams
-	// FloatExact just uses the float value it gets from input
+	// FloatExact passes float slices through unchanged.
 	FloatExact
-	// FloatReducer reduces a large number of floats to a smaller input space
+	// FloatReducer drops constant and highly correlated float dimensions.
 	FloatReducer
 )
 
-func (e EncoderType) String() string {
-	return [...]string{
-		"Automatic",
-		"StringDictionary",
-		"StringSplitDictionary",
-		"StringTopics",
-		"StringNGrams",
-		"FloatExact",
-		"FloatReducer",
-	}[e]
+var typeNames = [...]string{"automatic", "string-dictionary", "string-split-dictionary", "string-ngrams", "float-exact", "float-reducer"}
+
+// String returns the name of the type.
+func (t Type) String() string {
+	if t < 0 || int(t) >= len(typeNames) {
+		return fmt.Sprintf("Type(%d)", int(t))
+	}
+	return typeNames[t]
 }
 
-type EncoderModel interface {
-	Fit(*Input, *EncoderConfig)
-	CalculateString(string) []float64
-	CalculateFloats([]float64) []float64
-	GetDimensions() int
-	GetQuality() float64
-	Name() string
-	ToDump() ([]byte, error)
-	FromDump([]byte) error
+// MarshalText implements encoding.TextMarshaler.
+func (t Type) MarshalText() ([]byte, error) {
+	if t < 0 || int(t) >= len(typeNames) {
+		return nil, fmt.Errorf("encoders: invalid type %d", int(t))
+	}
+	return []byte(typeNames[t]), nil
 }
 
-type Encoder struct {
-	// Name of the encoder
-	Name string
-	// Dimensions hold the EncoderModel for the dimensions
-	Models map[string]*Dimension
-	// Config of the Encoder
-	Config *EncoderConfig
-	// Scanned determines if scan was executed
-	Scanned bool
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (t *Type) UnmarshalText(b []byte) error {
+	i := slices.Index(typeNames[:], string(b))
+	if i < 0 {
+		return fmt.Errorf("encoders: unknown type %q", b)
+	}
+	*t = Type(i)
+	return nil
 }
 
-type Dimension struct {
-	Inputs    int
-	InputType InputType
-	Type      EncoderType
-	Model     EncoderModel
+func (t Type) inputType() InputType {
+	if t == FloatExact || t == FloatReducer {
+		return Floats
+	}
+	return String
 }
 
-func NewEncoder(name string) *Encoder {
-	return &Encoder{
-		Name:   name,
-		Models: make(map[string]*Dimension),
-		Config: DefaultConfig(),
-	}
+// Model is a fitted encoding for one input dimension.
+type Model interface {
+	// Fit learns the model from sample data.
+	Fit(in *Input, cfg Config) error
+	// Encode converts a value into a feature vector of length Dimensions.
+	Encode(v Value) ([]float64, error)
+	// Dimensions returns the length of the produced feature vectors.
+	Dimensions() int
 }
 
-func (e *Encoder) Encode(name string, input Unified) []float64 {
-	vector := make([]float64, 0)
-	if _, ok := e.Models[name]; !ok {
-		log.Fatalf("Model %s is not part of encoder %s", name, e.Name)
-	}
-	switch e.Models[name].InputType {
-	case String:
-		vector = append(vector, e.Models[name].Model.CalculateString(input.String)...)
-	case Floats:
-		vector = append(vector, e.Models[name].Model.CalculateFloats(input.Float)...)
-	}
-	return vector
-}
-
-func (e *Encoder) Scan(name string, input *Input, encoder EncoderType) {
-	samples := len(input.Values)
-	if samples == 0 {
-		log.Fatalf("no data samples loaded")
-		return
-	}
-	// if encoder != automatic we execute here
-	if encoder != Automatic {
-		e.Models[name] = &Dimension{
-			InputType: input.Type,
-			Type:      encoder,
-		}
-		e.Scanned = true
-		return
-	}
-	if input.Type == Floats {
-		dims := len(input.Values[0].Float)
-		if e.Config.FloatReducerThreshold <= dims {
-			log.Printf("experimental (not executed): we would apply float reducer here")
-		}
-		e.Models[name] = &Dimension{
-			Type:      FloatExact,
-			InputType: Floats,
-		}
-
-	} else {
-		// input.Type == String
-		e.Models[name] = &Dimension{
-			InputType: String,
-			Type:      evaluateStrings(e.Config, input),
-		}
-	}
-	e.Scanned = true
-}
-
-func (e *Encoder) Transform(name string, set *Input) {
-	if !e.Scanned {
-		log.Printf("no set was scanned before, running scan()")
-		e.Scan(name, set, Automatic)
-	}
-	if _, ok := e.Models[name]; !ok {
-		log.Fatalf("no model: %s available to transform", name)
-	}
-	model := e.Models[name]
-	switch model.Type {
+// NewModel returns an unfitted model of the given type.
+func NewModel(t Type) (Model, error) {
+	switch t {
 	case StringDictionary:
-		model.Model = NewDictionaryModel()
-		model.Model.Fit(set, e.Config)
+		return &DictionaryModel{}, nil
 	case StringSplitDictionary:
-		model.Model = NewSplitDictionaryModel()
-		model.Model.Fit(set, e.Config)
+		return &SplitDictionaryModel{}, nil
 	case StringNGrams:
-		model.Model = NewNGramModel()
-		model.Model.Fit(set, e.Config)
-	case StringTopics:
-		log.Fatal("not implemented")
-	case FloatReducer:
-		model.Model = NewFloatReducerModel()
-		model.Model.Fit(set, e.Config)
+		return &NGramModel{}, nil
 	case FloatExact:
-		model.Model = NewFloatExactModel()
-		model.Model.Fit(set, e.Config)
+		return &FloatExactModel{}, nil
+	case FloatReducer:
+		return &FloatReducerModel{}, nil
 	}
+	return nil, fmt.Errorf("encoders: no model for type %v", t)
 }
 
-// reporting of what the encoder did
-func (e *Encoder) Explain() {
-	for k, v := range e.Models {
-		fmt.Printf("[%s] => %s, %s, to: %d dimensions", k, v.InputType.String(), v.Type.String(), v.Model.GetDimensions())
+// Dimension is the encoding of one named input.
+type Dimension struct {
+	InputType InputType `json:"input_type"`
+	Type      Type      `json:"type"`
+	// Model is nil until the dimension is fitted.
+	Model Model `json:"model,omitempty"`
+}
+
+// UnmarshalJSON decodes the dimension including its concrete model.
+func (d *Dimension) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		InputType InputType       `json:"input_type"`
+		Type      Type            `json:"type"`
+		Model     json.RawMessage `json:"model"`
 	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	d.InputType, d.Type, d.Model = raw.InputType, raw.Type, nil
+	if len(raw.Model) == 0 || string(raw.Model) == "null" {
+		return nil
+	}
+	m, err := NewModel(raw.Type)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw.Model, m); err != nil {
+		return err
+	}
+	d.Model = m
+	return nil
+}
+
+// Encoder encodes several named inputs.
+type Encoder struct {
+	Name       string                `json:"name"`
+	Config     Config                `json:"config"`
+	Dimensions map[string]*Dimension `json:"dimensions"`
+}
+
+// New creates an encoder with the default configuration.
+func New(name string) *Encoder {
+	return &Encoder{Name: name, Config: DefaultConfig(), Dimensions: make(map[string]*Dimension)}
+}
+
+// Scan chooses the model type for a dimension. With Automatic the type is
+// derived from the input data.
+func (e *Encoder) Scan(name string, in *Input, t Type) error {
+	if in == nil || len(in.Values) == 0 {
+		return errors.New("encoders: no input values to scan")
+	}
+	if e.Dimensions == nil {
+		e.Dimensions = make(map[string]*Dimension)
+	}
+	if t == Automatic {
+		if in.Type == Floats {
+			t = FloatExact
+		} else {
+			t = chooseStringType(e.Config, in)
+		}
+	}
+	if t.inputType() != in.Type {
+		return fmt.Errorf("encoders: type %v cannot encode %v input", t, in.Type)
+	}
+	e.Dimensions[name] = &Dimension{InputType: in.Type, Type: t}
+	return nil
+}
+
+// Fit learns the model of a dimension. If the dimension was not scanned
+// before, it is scanned automatically.
+func (e *Encoder) Fit(name string, in *Input) error {
+	d, ok := e.Dimensions[name]
+	if !ok {
+		if err := e.Scan(name, in, Automatic); err != nil {
+			return err
+		}
+		d = e.Dimensions[name]
+	}
+	if in.Type != d.InputType {
+		return fmt.Errorf("encoders: dimension %q expects %v input, got %v", name, d.InputType, in.Type)
+	}
+	m, err := NewModel(d.Type)
+	if err != nil {
+		return err
+	}
+	if err := m.Fit(in, e.Config); err != nil {
+		return fmt.Errorf("encoders: fit %q: %w", name, err)
+	}
+	d.Model = m
+	return nil
+}
+
+// Encode converts a value of a fitted dimension into a feature vector.
+func (e *Encoder) Encode(name string, v Value) ([]float64, error) {
+	d, ok := e.Dimensions[name]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownDimension, name)
+	}
+	if d.Model == nil {
+		return nil, fmt.Errorf("encoders: dimension %q is not fitted", name)
+	}
+	return d.Model.Encode(v)
+}
+
+// EncodeString is a shortcut for Encode with a string value.
+func (e *Encoder) EncodeString(name, s string) ([]float64, error) {
+	return e.Encode(name, Value{String: s})
+}
+
+// EncodeFloats is a shortcut for Encode with a float slice value.
+func (e *Encoder) EncodeFloats(name string, f []float64) ([]float64, error) {
+	return e.Encode(name, Value{Floats: f})
+}
+
+// Explain writes which model each dimension uses.
+func (e *Encoder) Explain(w io.Writer) error {
+	names := make([]string, 0, len(e.Dimensions))
+	for n := range e.Dimensions {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	var b strings.Builder
+	for _, n := range names {
+		d := e.Dimensions[n]
+		dims := 0
+		if d.Model != nil {
+			dims = d.Model.Dimensions()
+		}
+		fmt.Fprintf(&b, "[%s] %v input, %v, %d dimensions\n", n, d.InputType, d.Type, dims)
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
 }

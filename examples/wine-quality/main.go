@@ -1,64 +1,63 @@
+// Command wine-quality trains a regressor on the UCI wine quality data set.
+// The target column must be scaled to [0, 1].
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
+	"log"
+	"log/slog"
+	"os"
 
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
-	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/persist"
 )
 
-const (
-	dataFile            = "winequality-red.csv"
-	networkFile         = "network.json"
-	tries               = 1
-	epochs              = 200
-	trainingSplit       = 0.8
-	learningRate        = 0.02
-	decay               = 0.001
-	hiddenNeurons       = 50
-	regressionThreshold = 0.04 // helps evaluation to define between wrong or right
-)
-
 func main() {
-	data := learn.NewSet(neural.Regression)
-	ok, err := data.LoadFromCSV(dataFile)
-	if !ok || nil != err {
-		fmt.Printf("something went wrong -> %v", err)
+	dataFile := flag.String("data", "winequality-red.csv", "CSV file with the wine data")
+	networkFile := flag.String("out", "network.json", "where to store the trained network")
+	flag.Parse()
+
+	data := learn.NewSet(nn.Regression)
+	if err := data.LoadCSV(*dataFile); err != nil {
+		log.Fatal(err)
 	}
-	e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
-	e.SetVerbose(true)
-	e.SetConfig(&engine.Config{
-		Tries:               tries,
-		Epochs:              epochs,
-		TrainingSplit:       trainingSplit,
-		LearningRate:        learningRate,
-		Decay:               decay,
-		RegressionThreshold: 0.04,
-	})
-	// here we ware choosing Distance because we want the regressor that produces the best examples
-	e.Start(neural.Distance)
-	network, evaluation := e.GetWinner()
 
-	// regression evaluation
-	evaluation.PrintRegressionSummary()
+	cfg := engine.DefaultConfig()
+	cfg.Epochs = 200
+	cfg.TrainingSplit = 0.8
+	cfg.LearningRate = 0.02
+	cfg.Decay = 0.001
+	cfg.RegressionThreshold = 0.04
+	cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	err = persist.ToFile(networkFile, network)
+	e, err := engine.New(data, []int{50}, cfg)
 	if err != nil {
-		fmt.Printf("error while saving network: %v\n", err)
+		log.Fatal(err)
 	}
-	// persisted network
-	network2, err := persist.FromFile(networkFile)
-	if err != nil {
-		fmt.Printf("error while loading network: %v\n", err)
+	// Distance selects the regressor closest to the targets.
+	if err := e.Run(context.Background(), engine.Distance); err != nil {
+		log.Fatal(err)
+	}
+	network, eval := e.Winner()
+	if err := eval.WriteRegressionSummary(os.Stdout); err != nil {
+		log.Fatal(err)
 	}
 
-	// some examples
-	w := network2.Calculate(data.Samples[0].Vector)
-	fmt.Printf("%v -> %v\n", data.Samples[0].Value, w)
-	w = network2.Calculate(data.Samples[52].Vector)
-	fmt.Printf("%v -> %v\n", data.Samples[52].Value, w)
-	w = network2.Calculate(data.Samples[180].Vector)
-	fmt.Printf("%v -> %v\n", data.Samples[189].Value, w)
+	if err := persist.SaveNetwork(*networkFile, network); err != nil {
+		log.Fatal(err)
+	}
+	for _, i := range []int{0, 52, 180} {
+		if i >= data.Len() {
+			continue
+		}
+		out, err := network.Predict(data.Samples[i].Vector)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%.3f -> %.3f\n", data.Samples[i].Value, out[0])
+	}
 }

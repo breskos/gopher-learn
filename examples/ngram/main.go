@@ -1,7 +1,13 @@
+// Command ngram classifies questions by answer type using an n-gram encoder.
+//
+// The data file contains one "<question>#<label>" per line, with the labels
+// FACT, PARAGRAPH and LIST.
 package main
 
 import (
 	"bufio"
+	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,117 +16,108 @@ import (
 	"github.com/breskos/gopher-learn/encoders"
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
-	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/persist"
 )
 
-const (
-	dataFile      = "data.phrase"
-	delimiter     = "#"
-	tries         = 1
-	epochs        = 100
-	trainingSplit = 0.7
-	learningRate  = 0.4
-	decay         = 0.005
-	modelName     = "answer-type"
-)
+const dimension = "question"
 
-/*
-Different states to test dictionary
-
-*/
 func main() {
-	data := getData()
-	e := encoders.NewEncoder("dictionary")
-	set := encoders.NewInput(modelName, encoders.String)
-	for _, v := range data {
-		splitted := strings.Split(v, delimiter)
-		set.AddString(splitted[0])
-	}
-	e.Scan(modelName, set, encoders.Automatic)
-	e.Transform(modelName, set)
-	e.Explain()
+	dataFile := flag.String("data", "data.phrase", "file with <question>#<label> lines")
+	encoderFile := flag.String("encoder", "encoder.json", "where to store the encoder")
+	flag.Parse()
 
-	// this is just an example how to persist the encoders
-	persist.EncoderToFile("encoder.json", e)
-	e2, err := persist.EncoderFromFile("encoder.json")
+	rows, err := readRows(*dataFile)
 	if err != nil {
-		log.Fatalf("error persisting encoder: %v", err)
-	}
-	fmt.Println("after persisting")
-	e2.Explain()
-
-	// TODO(abresk) here I noticed that Sample, Set in learn are not optimized to be used in this manner
-	// They were designed to load samples from file.
-	// Get vectors for training
-	output := make(map[string]int)
-	output["FACT"] = 0
-	output["PARAGRAPH"] = 1
-	output["LIST"] = 2
-	learningSet := learn.NewSet(neural.Classification)
-	learningSet.AddClass("FACT")      // 0
-	learningSet.AddClass("PARAGRAPH") // 1
-	learningSet.AddClass("LIST")      // 2
-
-	for _, v := range data {
-		splitted := strings.Split(v, delimiter)
-		input := encoders.Unified{String: splitted[0]}
-		vector := e.Encode(modelName, input)
-		outVec := []float64{0.0, 0.0, 0.0}
-		outVec[output[splitted[1]]] = 1.0
-		learningSet.AddSample(learn.NewClassificationSample(vector, outVec, splitted[1]))
+		log.Fatal(err)
 	}
 
-	// training the network
-	en := engine.NewEngine(neural.Classification, []int{80}, learningSet)
-	en.SetVerbose(true)
-	en.SetConfig(&engine.Config{
-		Tries:         tries,
-		Epochs:        epochs,
-		TrainingSplit: trainingSplit,
-		LearningRate:  learningRate,
-		Decay:         decay,
-	})
-	en.Start(neural.Distance)
-	network, evaluation := en.GetWinner()
-	evaluation.PrintSummary("FACT")
-	fmt.Println()
-	evaluation.PrintSummary("PARAGRAPH")
-	fmt.Println()
-	evaluation.PrintSummary("LIST")
+	enc := encoders.New("questions")
+	in := encoders.NewInput(encoders.String)
+	for _, r := range rows {
+		in.AddString(r[0])
+	}
+	if err := enc.Scan(dimension, in, encoders.StringNGrams); err != nil {
+		log.Fatal(err)
+	}
+	if err := enc.Fit(dimension, in); err != nil {
+		log.Fatal(err)
+	}
+	if err := persist.SaveEncoder(*encoderFile, enc); err != nil {
+		log.Fatal(err)
+	}
+	if err := enc.Explain(os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 
-	// testing with own example
-	vector := e2.Encode(modelName, encoders.Unified{String: "Wieviel Saft ist drin?"})
-	w := network.CalculateWinnerLabel(vector)
-	fmt.Printf("%v -> %v\n", "FACT", w)
+	set := learn.NewSet(nn.Classification)
+	for _, label := range []string{"FACT", "PARAGRAPH", "LIST"} {
+		if err := set.AddClass(label); err != nil {
+			log.Fatal(err)
+		}
+	}
+	for _, r := range rows {
+		vector, err := enc.EncodeString(dimension, r[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		sample := learn.NewClassificationSample(vector, r[1])
+		if set.Contains(sample) {
+			continue
+		}
+		if err := set.Add(sample); err != nil {
+			log.Fatal(err)
+		}
+	}
 
-	vector = e2.Encode(modelName, encoders.Unified{String: "Welche Optionen gibt es um einen Org zu besiegen?"})
-	w = network.CalculateWinnerLabel(vector)
-	fmt.Printf("%v -> %v\n", "LIST", w)
+	e, err := engine.New(set, []int{80}, engine.DefaultConfig())
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := e.Run(context.Background(), engine.Distance); err != nil {
+		log.Fatal(err)
+	}
+	network, eval := e.Winner()
+	if err := eval.WriteSummaries(os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 
-	vector = e2.Encode(modelName, encoders.Unified{String: "Was ist ein Haus?"})
-	w = network.CalculateWinnerLabel(vector)
-	fmt.Printf("%v -> %v\n", "PARAGRAPH", w)
-
-	vector = e2.Encode(modelName, encoders.Unified{String: "Woraus besteht ein Garten?"})
-	w = network.CalculateWinnerLabel(vector)
-	fmt.Printf("%v -> %v\n", "LIST", w)
-
+	loaded, err := persist.LoadEncoder(*encoderFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, q := range []string{
+		"Wieviel Saft ist drin?",
+		"Welche Optionen gibt es um einen Ork zu besiegen?",
+		"Was ist ein Haus?",
+		"Woraus besteht ein Garten?",
+	} {
+		vector, err := loaded.EncodeString(dimension, q)
+		if err != nil {
+			log.Fatal(err)
+		}
+		label, err := network.Classify(vector)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%s -> %s\n", q, label)
+	}
 }
 
-func getData() []string {
-	file, err := os.Open("data.phrase")
-
+func readRows(path string) ([][2]string, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("failed to open")
-
+		return nil, err
 	}
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-	var text []string
-	for scanner.Scan() {
-		text = append(text, scanner.Text())
+	defer func() { _ = f.Close() }()
+	var rows [][2]string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		question, label, ok := strings.Cut(sc.Text(), "#")
+		if !ok {
+			continue
+		}
+		rows = append(rows, [2]string{question, strings.TrimSpace(label)})
 	}
-	file.Close()
-	return text
+	return rows, sc.Err()
 }

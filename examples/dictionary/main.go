@@ -1,7 +1,9 @@
+// Command dictionary encodes string states with a dictionary encoder and
+// trains a classifier on them. It needs no data files.
 package main
 
 import (
-	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,91 +12,78 @@ import (
 	"github.com/breskos/gopher-learn/encoders"
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
-	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/nn"
 )
 
-const (
-	dataFile      = "data.phrase"
-	delimiter     = ","
-	tries         = 1
-	epochs        = 100
-	trainingSplit = 0.7
-	learningRate  = 0.4
-	decay         = 0.005
-	model         = "onoff"
-)
+const dimension = "onoff"
+
+// Each row is "<input 1>,<input 2>,<expected label>".
+var data = []string{"ON,OFF,ON", "OFF,ON,ON", "OFF,OFF,OFF", "ON,ON,ON"}
 
 func main() {
-	e := encoders.NewEncoder("answer-representation")
-	input := encoders.NewInput(model, encoders.String)
-	input.AddString("ON,OFF")
-	input.AddString("OFF,ON")
-	input.AddString("OFF,OFF")
-	input.AddString("ON,ON")
-	e.Scan(model, input, encoders.Automatic)
-	e.Transform(model, input)
-	e.Explain()
+	enc := encoders.New("answer-representation")
+	in := encoders.NewInput(encoders.String)
+	for _, row := range data {
+		in.AddString(input(row))
+	}
+	if err := enc.Fit(dimension, in); err != nil { // scans automatically
+		log.Fatal(err)
+	}
+	if err := enc.Explain(os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 
-	// TODO(abresk) here I noticed that Sample, Set in learn are not optimized to be used in this manner
-	// They were designed to load samples from file.
-	// Get vectors for training
-	output := make(map[string]int)
-	output["ON"] = 0
-	output["OFF"] = 1
-	learningSet := learn.NewSet(neural.Classification)
-	learningSet.AddClass("ON")  // 0
-	learningSet.AddClass("OFF") // 1
-	data := []string{"ON,OFF,ON", "OFF,ON,ON", "OFF,OFF,OFF", "ON,ON,ON"}
-	for i := 0; i < 50; i++ {
-		for _, v := range data {
-			splitted := strings.Split(v, delimiter)
-			input := fmt.Sprintf("%s,%s", splitted[0], splitted[1])
-			vector := e.Encode(model, encoders.Unified{String: input})
-			outVec := []float64{0.0, 0.0}
-			outVec[output[splitted[1]]] = 1.0
-			learningSet.AddSample(learn.NewClassificationSample(vector, outVec, splitted[2]))
+	set := learn.NewSet(nn.Classification)
+	for _, label := range []string{"ON", "OFF"} {
+		if err := set.AddClass(label); err != nil {
+			log.Fatal(err)
+		}
+	}
+	for range 50 {
+		for _, row := range data {
+			vector, err := enc.EncodeString(dimension, input(row))
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err := set.Add(learn.NewClassificationSample(vector, label(row))); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
-	// training the network
-	en := engine.NewEngine(neural.Classification, []int{3}, learningSet)
-	en.SetVerbose(true)
-	en.SetConfig(&engine.Config{
-		Tries:         tries,
-		Epochs:        epochs,
-		TrainingSplit: trainingSplit,
-		LearningRate:  learningRate,
-		Decay:         decay,
-	})
-	en.Start(neural.Distance)
-	network, evaluation := en.GetWinner()
-	evaluation.PrintSummary("ON")
-	fmt.Println()
-	evaluation.PrintSummary("OFF")
+	cfg := engine.DefaultConfig()
+	cfg.Decay = 0.05
+	e, err := engine.New(set, []int{3}, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := e.Run(context.Background(), engine.Distance); err != nil {
+		log.Fatal(err)
+	}
+	network, eval := e.Winner()
+	if err := eval.WriteConfusionMatrix(os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 
-	// testing with own example
-	for _, v := range data {
-		splitted := strings.Split(v, delimiter)
-		input := fmt.Sprintf("%s,%s", splitted[0], splitted[1])
-		vector := e.Encode(model, encoders.Unified{String: input})
-		w := network.CalculateWinnerLabel(vector)
-		fmt.Printf("%v -> %v\n", splitted[2], w)
+	for _, row := range data {
+		vector, err := enc.EncodeString(dimension, input(row))
+		if err != nil {
+			log.Fatal(err)
+		}
+		got, err := network.Classify(vector)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%-8s expected %-3s got %s\n", input(row), label(row), got)
 	}
 }
 
-func getData() []string {
-	file, err := os.Open("data.phrase")
+func input(row string) string {
+	parts := strings.Split(row, ",")
+	return parts[0] + "," + parts[1]
+}
 
-	if err != nil {
-		log.Fatalf("failed to open")
-
-	}
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-	var text []string
-	for scanner.Scan() {
-		text = append(text, scanner.Text())
-	}
-	file.Close()
-	return text
+func label(row string) string {
+	parts := strings.Split(row, ",")
+	return parts[2]
 }

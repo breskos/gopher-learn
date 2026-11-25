@@ -1,135 +1,208 @@
+// Package online trains a network continuously from a stream of samples.
+//
+// New samples are injected with Inject, which applies a few quick training
+// steps on the sample. Iterate retrains on the collected data set and
+// evaluates the network on a random split.
 package online
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"time"
+	"log/slog"
+	"math/rand/v2"
 
 	"github.com/breskos/gopher-learn/evaluation"
-	learn "github.com/breskos/gopher-learn/learn"
-	"github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/internal/train"
+	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/nn"
 )
 
-const (
-	errDataPointExists = "data point exists (force not activated)"
+var (
+	// ErrSampleExists is returned by Inject for a duplicate sample without force.
+	ErrSampleExists = errors.New("online: sample already exists")
+	// ErrNotEnoughData is returned by Iterate if the set has fewer than MinimumDataPoints samples.
+	ErrNotEnoughData = errors.New("online: not enough data points")
 )
 
-// Online contains every necessary for starting the engine
-type Online struct {
-	NetworkInput   int
-	NetworkLayer   []int
-	NetworkOutput  int
-	Data           *learn.Set
-	Network        *net.Network
-	LastEvaluation *evaluation.Evaluation
-	Verbose        bool
-	Usage          net.NetworkType
-	AddedPoints    int
-	Config         *Config
+// Config controls the online learner.
+type Config struct {
+	// HotShots is the number of training steps applied to a newly injected sample.
+	HotShots int `json:"hot_shots"`
+	// HotShotRate is the learning rate used for those steps.
+	HotShotRate float64 `json:"hot_shot_rate"`
+	// TrainingSplit is the ratio of samples used for training in Iterate.
+	TrainingSplit float64 `json:"training_split"`
+	// MinimumDataPoints is the number of samples required before Iterate trains.
+	MinimumDataPoints int `json:"minimum_data_points"`
+	// MinEpochs and MaxEpochs bound the random number of epochs per iteration.
+	MinEpochs int `json:"min_epochs"`
+	MaxEpochs int `json:"max_epochs"`
+	// MinLearningRate and MaxLearningRate bound the random learning rate per iteration.
+	MinLearningRate float64 `json:"min_learning_rate"`
+	MaxLearningRate float64 `json:"max_learning_rate"`
+	// TargetScore is the score Init trains towards.
+	TargetScore float64 `json:"target_score"`
+	// MaxInitLoops bounds the number of iterations of Init.
+	MaxInitLoops int `json:"max_init_loops"`
+	// RegressionThreshold is the maximum error for a regression prediction to count as correct.
+	RegressionThreshold float64 `json:"regression_threshold"`
+	// BatchSize is the mini-batch size. Values <= 1 mean stochastic gradient descent.
+	BatchSize int `json:"batch_size"`
+	// HiddenActivation and OutputActivation configure the network. Both default to Sigmoid.
+	HiddenActivation nn.Activation `json:"hidden_activation"`
+	OutputActivation nn.Activation `json:"output_activation"`
+	// Seed makes training reproducible. Zero uses a random seed.
+	Seed uint64 `json:"seed"`
+	// Logger receives progress information. Nil disables logging.
+	Logger *slog.Logger `json:"-"`
 }
 
-// NewOnline creates a new Engine object
-func NewOnline(usage net.NetworkType, inputs int, hiddenLayer []int, data *learn.Set) *Online {
-	var outputLength int
-	if net.Regression == usage {
-		outputLength = 1
-	} else {
-		outputLength = len(data.ClassToLabel)
-	}
-	return &Online{
-		NetworkInput:  inputs,
-		NetworkOutput: outputLength,
-		NetworkLayer:  hiddenLayer,
-		Data:          data,
-		Network:       net.BuildNetwork(usage, inputs, hiddenLayer, data.ClassToLabel),
-		Verbose:       false,
-		Usage:         usage,
-		AddedPoints:   0,
-		Config:        DefaultConfig(),
+// DefaultConfig returns the default configuration.
+func DefaultConfig() Config {
+	return Config{
+		HotShots:            5,
+		HotShotRate:         0.5,
+		TrainingSplit:       0.7,
+		MinimumDataPoints:   10,
+		MinEpochs:           10,
+		MaxEpochs:           30,
+		MinLearningRate:     0.2,
+		MaxLearningRate:     0.5,
+		TargetScore:         0.7,
+		MaxInitLoops:        5,
+		RegressionThreshold: 0.05,
 	}
 }
 
-// Init initializes the online learner with a short learning upfront
-func (o *Online) Init() float64 {
-	fMeasure := 0.0
-	for i := 0; i < o.Config.MaxInitLoops; i++ {
-		fMeasure = o.Iterate()
-		if fMeasure < o.Config.InitialFMeasure {
-			return fMeasure
-		}
+// Validate checks the configuration.
+func (c Config) Validate() error {
+	switch {
+	case c.TrainingSplit <= 0 || c.TrainingSplit >= 1:
+		return errors.New("online: TrainingSplit must be in (0, 1)")
+	case c.MinEpochs < 1 || c.MaxEpochs < c.MinEpochs:
+		return errors.New("online: need 1 <= MinEpochs <= MaxEpochs")
+	case c.MinLearningRate <= 0 || c.MaxLearningRate < c.MinLearningRate:
+		return errors.New("online: need 0 < MinLearningRate <= MaxLearningRate")
+	case c.MinimumDataPoints < 2:
+		return errors.New("online: MinimumDataPoints must be at least 2")
 	}
-	return fMeasure
-
-}
-
-// Inject tries to inject a new data point into the neural net
-func (o *Online) Inject(sample *learn.Sample, force bool) error {
-	exists := o.Data.SampleExists(sample)
-	if exists && !force {
-		return errors.New(errDataPointExists)
-	}
-	err := o.Data.AddSample(sample)
-	if err != nil {
-		return fmt.Errorf("cannot add example: %v", err)
-	}
-	o.hotShot(sample)
 	return nil
 }
 
-// Applies a Sample with hotShot speed to the network
-func (o *Online) hotShot(sample *learn.Sample) {
-	for i := 0; i < o.Config.FirstShots; i++ {
-		learn.Learn(o.Network, sample.Vector, sample.Output, o.Config.HotShotBoost)
+// Online is a continuously learning network.
+type Online struct {
+	Config         Config                 `json:"config"`
+	Hidden         []int                  `json:"hidden"`
+	Data           *learn.Set             `json:"data"`
+	Network        *nn.Network            `json:"network"`
+	LastEvaluation *evaluation.Evaluation `json:"last_evaluation,omitempty"`
+
+	rng *rand.Rand
+}
+
+// New creates an online learner. The data set defines the task and, for
+// classification, the classes; it may be empty. inputs is the size of the
+// feature vectors.
+func New(data *learn.Set, inputs int, hidden []int, cfg Config) (*Online, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
-}
-
-// Iterate iterates over the data set and applies continous learning
-func (o *Online) Iterate() float64 {
-	if len(o.Data.Samples) < o.Config.MinimumDataPoints {
-		return 0.0
+	if data == nil {
+		return nil, errors.New("online: nil data set")
 	}
-	rand.Seed(time.Now().UnixNano())
-	training, testing := split(o.Usage, o.Data, o.Config.TrainingSplit)
-	speed := o.Config.MinLearningSpeed + rand.Float64()*(o.Config.MaxLearningSpeed-o.Config.MinLearningSpeed)
-	epochs := rand.Intn(o.Config.MaxEpochs-o.Config.MinEpochs+1) + o.Config.MinEpochs
-	train(o.Network, training, speed, epochs)
-	evaluation := evaluate(o.Usage, o.Network, testing, training, o.Config.RegressionThreshold)
-	if o.Verbose {
-		evaluation.PrintConfusionMatrix()
-		evaluation.PrintSummaries()
+	o := &Online{Config: cfg, Hidden: append([]int(nil), hidden...), Data: data}
+	net, err := nn.New(nn.Config{
+		Inputs:           inputs,
+		Hidden:           hidden,
+		Outputs:          data.OutputSize(),
+		Labels:           data.Labels,
+		HiddenActivation: cfg.HiddenActivation,
+		OutputActivation: cfg.OutputActivation,
+		Rand:             o.random(),
+	})
+	if err != nil {
+		return nil, err
 	}
-	o.LastEvaluation = evaluation
-	return evaluation.GetOverallFMeasure()
+	o.Network = net
+	return o, nil
 }
 
-// SetVerbose sets the verbose version meaning debug and evaluation logs
-func (o *Online) SetVerbose(verbose bool) {
-	o.Verbose = verbose
-}
-
-// checks if a sample is already in set
-func (o *Online) sampleExists(sample *learn.Sample) bool {
-	if sample.VectorHash == "" {
-		sample.UpdateHashes()
+func (o *Online) random() *rand.Rand {
+	if o.rng == nil {
+		o.rng = train.NewRand(o.Config.Seed)
 	}
-	if o.Data.SampleExists(sample) {
-		return true
+	return o.rng
+}
+
+func (o *Online) logger() *slog.Logger {
+	if o.Config.Logger == nil {
+		return slog.New(slog.DiscardHandler)
 	}
-	return false
+	return o.Config.Logger
 }
 
-// Prints the current evaluation
-func print(e *evaluation.Evaluation) {
-	fmt.Printf("\n [Best] acc: %.2f  / bacc: %.2f / f1: %.2f / correct: %.2f / distance: %.2f\n", e.GetOverallAccuracy(), e.GetOverallBalancedAccuracy(), e.GetOverallFMeasure(), e.GetCorrectRatio(), e.GetDistance())
+// Init iterates until the score reaches Config.TargetScore or
+// Config.MaxInitLoops is exhausted and returns the last score.
+func (o *Online) Init(ctx context.Context) (float64, error) {
+	var score float64
+	for range max(o.Config.MaxInitLoops, 1) {
+		var err error
+		if score, err = o.Iterate(ctx); err != nil {
+			return score, err
+		}
+		if score >= o.Config.TargetScore {
+			break
+		}
+	}
+	return score, nil
 }
 
-// SetConfig sets a new config from outside for the online learner
-func (o *Online) SetConfig(cfg *Config) {
-	o.Config = cfg
+// Inject adds a sample to the data set and trains the network on it.
+// A sample whose feature vector already exists is rejected unless force is set.
+func (o *Online) Inject(sample *learn.Sample, force bool) error {
+	if !force && o.Data.Contains(sample) {
+		return ErrSampleExists
+	}
+	if err := o.Data.Add(sample); err != nil {
+		return fmt.Errorf("online: %w", err)
+	}
+	for range o.Config.HotShots {
+		if _, err := o.Network.Train(sample.Vector, sample.Output, o.Config.HotShotRate); err != nil {
+			return fmt.Errorf("online: %w", err)
+		}
+	}
+	return nil
 }
 
-// GetConfig returns the current online learner configuration
-func (o *Online) GetConfig() *Config {
-	return o.Config
+// Iterate retrains the network on a random split of the collected data and
+// returns its score on the remaining samples: the macro F1 score for
+// classification, the ratio of correct predictions for regression.
+func (o *Online) Iterate(ctx context.Context) (float64, error) {
+	if o.Data.Len() < o.Config.MinimumDataPoints {
+		return 0, ErrNotEnoughData
+	}
+	rng := o.random()
+	training, testing, err := o.Data.Split(o.Config.TrainingSplit, rng)
+	if err != nil {
+		return 0, err
+	}
+	lr := o.Config.MinLearningRate + rng.Float64()*(o.Config.MaxLearningRate-o.Config.MinLearningRate)
+	epochs := o.Config.MinEpochs + rng.IntN(o.Config.MaxEpochs-o.Config.MinEpochs+1)
+	for range epochs {
+		if _, err := train.Epoch(ctx, o.Network, training, lr, o.Config.BatchSize, rng); err != nil {
+			return 0, err
+		}
+	}
+	eval, err := evaluation.Evaluate(o.Network, testing, o.Config.RegressionThreshold)
+	if err != nil {
+		return 0, err
+	}
+	o.LastEvaluation = eval
+	score := eval.CorrectRatio()
+	if o.Data.Task == nn.Classification {
+		score = eval.OverallFMeasure()
+	}
+	o.logger().Info("iteration", "samples", o.Data.Len(), "epochs", epochs, "learning_rate", lr, "score", score)
+	return score, nil
 }

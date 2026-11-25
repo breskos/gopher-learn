@@ -1,4 +1,7 @@
-# Float Reducer
+# Float reducer
 
-The FloatReducer examples shows how the encoder works for float slices.
-If you need more information on the FloatReducer see docs/encoders.md.
+Shows how the float reducer removes constant and highly correlated dimensions from float vectors. See [docs/encoders.md](../../docs/encoders.md) for details.
+
+```
+go run .
+```

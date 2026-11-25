@@ -1,303 +1,165 @@
 package learn
 
 import (
-	"bufio"
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"strconv"
+	"math"
+	"math/rand/v2"
+	"slices"
 
-	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/nn"
 )
 
-const (
-	maxActivation  = 1.0
-	minActivation  = 0.0
-	labelRegressor = "output"
-
-	errUsageTypeNotMatching = "usage type not matching"
-	errClassLabelNotFound   = "class label not found in set"
+var (
+	// ErrUnknownClass is returned when a sample references a class the set does not know.
+	ErrUnknownClass = errors.New("learn: unknown class")
+	// ErrTaskMismatch is returned for operations that do not fit the task of the set.
+	ErrTaskMismatch = errors.New("learn: operation does not match task")
 )
 
-// Set holds the samples and the output labels
+// Set is a collection of samples for one task.
 type Set struct {
-	Samples      []*Sample
-	VectorHashes []string
-	OutputHashes []string
-	ClassToLabel map[int]string
-	Usage        neural.NetworkType
+	Task    nn.Task   `json:"task"`
+	Labels  []string  `json:"labels,omitempty"`
+	Samples []*Sample `json:"samples"`
+
+	index map[uint64]struct{}
 }
 
-// NewSet creates a new set of empty data samples
-func NewSet(usage neural.NetworkType) *Set {
-	return &Set{
-		Samples:      make([]*Sample, 0),
-		ClassToLabel: make(map[int]string),
-		Usage:        usage,
+// NewSet creates an empty set.
+func NewSet(task nn.Task) *Set {
+	return &Set{Task: task}
+}
+
+// Len returns the number of samples.
+func (s *Set) Len() int { return len(s.Samples) }
+
+// InputSize returns the length of the feature vectors, or 0 for an empty set.
+func (s *Set) InputSize() int {
+	if len(s.Samples) == 0 {
+		return 0
 	}
+	return len(s.Samples[0].Vector)
 }
 
-// AddClass returns the classes in the set
-func (s *Set) AddClass(label string) (bool, error) {
-	if s.Usage != neural.Classification {
-		return false, fmt.Errorf(errUsageTypeNotMatching)
+// OutputSize returns the length of the output vectors.
+func (s *Set) OutputSize() int {
+	if s.Task == nn.Regression {
+		return 1
 	}
-	l := len(s.ClassToLabel)
-	s.ClassToLabel[l] = label
-	return true, nil
+	return len(s.Labels)
 }
 
-// GetClasses returns the classes in the set
-func (s *Set) GetClasses() []string {
-	classes := make([]string, len(s.ClassToLabel))
-	for k, v := range s.ClassToLabel {
-		classes[k] = v
+// AddClass registers a new class label. Classes are indexed in the order
+// they are added, which defines the order of the network outputs. The target
+// vectors of existing samples are extended accordingly.
+func (s *Set) AddClass(label string) error {
+	if s.Task != nn.Classification {
+		return fmt.Errorf("%w: AddClass on %v set", ErrTaskMismatch, s.Task)
 	}
-	return classes
-}
-
-// Adds a vector with the corresponding output to the data set
-func (s *Set) add(vector, output []float64, label string, classNumber int, value float64) {
-	sample := &Sample{}
-	sample.Vector = vector
-	sample.Output = output
-	sample.Label = label
-	sample.ClassNumber = classNumber
-	sample.Value = value
-	sample.UpdateHashes()
-	// register hashes in data set
-	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
-	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
-	s.Samples = append(s.Samples, sample)
-}
-
-// AddSample adds samples to the set
-func (s *Set) AddSample(sample *Sample) error {
-	index, err := s.getClassIndex(sample.Label)
-	if err != nil {
-		return err
+	if slices.Contains(s.Labels, label) {
+		return fmt.Errorf("learn: class %q already exists", label)
 	}
-	sample.ClassNumber = index
-	sample.UpdateHashes()
-	s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
-	s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
-	s.Samples = append(s.Samples, sample)
-	return nil
-}
-
-// Returns the label from a given class number
-func (s *Set) getLabelFromClass(number int) (string, bool) {
-	if val, ok := s.ClassToLabel[number]; ok {
-		return val, true
-	}
-	return "", false
-}
-
-// Returns the class from the corresponding label
-func (s *Set) getClassFromLabel(label string) (int, bool) {
-	for k, v := range s.ClassToLabel {
-		if v == label {
-			return k, true
-		}
-	}
-	return -1, false
-}
-
-// Shows the distribution of the data set by the label
-func (s *Set) distributionByLabel(label string) map[string]int {
-	if s.Usage == neural.Classification {
-		dist := make(map[string]int)
-		for sample := range s.Samples {
-			c := s.Samples[sample].Label
-			if _, ok := dist[c]; ok {
-				dist[c]++
-			} else {
-				dist[c] = 1
-			}
-		}
-		return dist
+	s.Labels = append(s.Labels, label)
+	for _, sm := range s.Samples {
+		sm.Output = append(sm.Output, 0)
 	}
 	return nil
 }
 
-// Shows the distribution by class number of a the data set
-func (s *Set) distributionByClassNumber(number int) map[int]int {
-	if s.Usage == neural.Classification {
-		dist := make(map[int]int)
-		for sample := range s.Samples {
-			c := s.Samples[sample].ClassNumber
-			if _, ok := dist[c]; ok {
-				dist[c]++
-			} else {
-				dist[c] = 1
-			}
-		}
-		return dist
-	}
-	return nil
+// ClassIndex returns the index of a class label.
+func (s *Set) ClassIndex(label string) (int, bool) {
+	i := slices.Index(s.Labels, label)
+	return i, i >= 0
 }
 
-// LoadFromCSV where the last dimension is the label
-func (s *Set) LoadFromCSV(path string) (bool, error) {
-	classNumbers := make(map[string]int)
-	classNumber := 0
-	f, err := os.Open(path)
-	if err != nil {
-		return false, fmt.Errorf("error while open file: %v", path)
+// OneHot returns the target vector of a class label.
+func (s *Set) OneHot(label string) ([]float64, error) {
+	i, ok := s.ClassIndex(label)
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownClass, label)
 	}
-	defer f.Close()
-	r := csv.NewReader(bufio.NewReader(f))
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		l := len(record)
-		sample := &Sample{}
-		sample.Vector = make([]float64, l-1)
-		if s.Usage == neural.Regression {
-			regression, err := strconv.ParseFloat(record[l-1], 64)
-			if err == nil {
-				sample.Value = regression
-			}
-		} else if s.Usage == neural.Classification {
-			sample.Label = record[l-1]
-			if _, ok := classNumbers[sample.Label]; !ok {
-				classNumbers[sample.Label] = classNumber
-				classNumber++
-			}
-		}
-		for value := range record {
-			if value < l-1 {
-				f, err := strconv.ParseFloat(record[value], 64)
-				if err != nil {
-					return false, fmt.Errorf("failed to parse float %v with error: %v", record[value], err)
-				}
-				sample.Vector[value] = f
-			}
-		}
-		sample.UpdateHashes()
-		// register hashes in data set
-		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
-		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
-		s.Samples = append(s.Samples, sample)
-	}
-	s.createClassToLabel(classNumbers)
-	s.addOutputVectors()
-	return true, nil
+	v := make([]float64, len(s.Labels))
+	v[i] = 1
+	return v, nil
 }
 
-// Adds the output vectors for the 2 cases classification or regression
-func (s *Set) addOutputVectors() {
-	if s.Usage == neural.Classification {
-		dim := len(s.ClassToLabel)
-		for sample := range s.Samples {
-			v := make([]float64, dim)
-			v[s.Samples[sample].ClassNumber] = maxActivation
-			s.Samples[sample].Output = v
-		}
-	} else if s.Usage == neural.Regression {
-		for sample := range s.Samples {
-			s.Samples[sample].Output = make([]float64, 1)
-			s.Samples[sample].Output[0] = s.Samples[sample].Value
-		}
+// Add validates a sample, fills in its target vector and appends it.
+func (s *Set) Add(sample *Sample) error {
+	if sample == nil {
+		return errors.New("learn: nil sample")
 	}
-}
-
-// Creats a class to the label and adding it to the set
-func (s *Set) createClassToLabel(mapping map[string]int) {
-	s.ClassToLabel = make(map[int]string)
-	if neural.Classification == s.Usage {
-		for k, v := range mapping {
-			s.ClassToLabel[v] = k
-		}
-		for i := range s.Samples {
-			s.Samples[i].ClassNumber = mapping[s.Samples[i].Label]
-		}
-	} else {
-		s.ClassToLabel[0] = labelRegressor
+	if n := s.InputSize(); n > 0 && len(sample.Vector) != n {
+		return fmt.Errorf("learn: sample has %d features, set has %d", len(sample.Vector), n)
 	}
-
-}
-
-// SampleExists looks up in the set if the presented example already exists
-func (s *Set) SampleExists(test *Sample) bool {
-	if test.VectorHash == "" {
-		test.UpdateHashes()
-	}
-	for _, vector := range s.VectorHashes {
-		if vector == test.VectorHash {
-			return true
-		}
-	}
-	return false
-}
-
-// LoadFromSVMFile load data from an svm problem file
-func (s *Set) LoadFromSVMFile(path string) (bool, error) {
-	classNumbers := make(map[string]int)
-	classNumber := 0
-	highestIndex := scanSamples(path)
-	file, err := os.Open(path)
-	if err != nil {
-		return false, fmt.Errorf("error while opening file")
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		m, label, err := problemToMap(line)
+	switch s.Task {
+	case nn.Classification:
+		out, err := s.OneHot(sample.Label)
 		if err != nil {
-			return false, fmt.Errorf("error while scanning files: %v", err)
+			return err
 		}
-		sample := &Sample{}
-		sample.Vector = make([]float64, highestIndex)
-		sample.Label = label
-		regression, err := strconv.ParseFloat(label, 64)
-		if err != nil {
-			sample.Value = regression
-		}
-		if _, ok := classNumbers[sample.Label]; !ok {
-			classNumbers[sample.Label] = classNumber
-			classNumber++
-		}
-		for i := 0; i < highestIndex; i++ {
-			if val, ok := m[i]; ok {
-				sample.Vector[i] = val
-			} else {
-				sample.Vector[i] = 0.0
-			}
-		}
-		sample.UpdateHashes()
-		// register hashes in data set
-		s.VectorHashes = append(s.VectorHashes, sample.VectorHash)
-		s.OutputHashes = append(s.OutputHashes, sample.OutputHash)
-		s.Samples = append(s.Samples, sample)
+		sample.Class = slices.Index(out, 1)
+		sample.Output = out
+	case nn.Regression:
+		sample.Output = []float64{sample.Value}
+	default:
+		return fmt.Errorf("learn: invalid task %v", s.Task)
 	}
-	return true, nil
+	s.ensureIndex()
+	s.index[sample.Key()] = struct{}{}
+	s.Samples = append(s.Samples, sample)
+	return nil
 }
 
-// GenerateOutputVector generates the output vector for a classification task and a specific label
-func (s *Set) GenerateOutputVector(label string) []float64 {
-	var output []float64
-	for _, v := range s.ClassToLabel {
-		if v == label {
-			output = append(output, maxActivation)
-		} else {
-			output = append(output, minActivation)
-		}
-	}
-	return output
+// Contains reports whether a sample with the same feature vector exists.
+func (s *Set) Contains(sample *Sample) bool {
+	s.ensureIndex()
+	_, ok := s.index[sample.Key()]
+	return ok
 }
 
-// Returns the class index of a string label
-func (s *Set) getClassIndex(label string) (int, error) {
-	for k, v := range s.ClassToLabel {
-		if label == v {
-			return k, nil
-		}
+func (s *Set) ensureIndex() {
+	if s.index != nil {
+		return
 	}
-	return 0, errors.New(errUsageTypeNotMatching)
+	s.index = make(map[uint64]struct{}, len(s.Samples))
+	for _, sm := range s.Samples {
+		s.index[sm.Key()] = struct{}{}
+	}
+}
+
+// Distribution returns the number of samples per class label.
+func (s *Set) Distribution() map[string]int {
+	d := make(map[string]int, len(s.Labels))
+	for _, sm := range s.Samples {
+		d[sm.Label]++
+	}
+	return d
+}
+
+// Split shuffles the samples and divides them into two sets, the first one
+// holding the given ratio of samples. Both sets share the sample pointers.
+// If the set has at least two samples, neither part is empty.
+func (s *Set) Split(ratio float64, rng *rand.Rand) (*Set, *Set, error) {
+	if ratio <= 0 || ratio >= 1 {
+		return nil, nil, fmt.Errorf("learn: split ratio must be in (0, 1), got %v", ratio)
+	}
+	if rng == nil {
+		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	}
+	idx := rng.Perm(len(s.Samples))
+	cut := int(math.Round(ratio * float64(len(idx))))
+	if len(idx) >= 2 {
+		cut = min(max(cut, 1), len(idx)-1)
+	}
+	a, b := s.subset(idx[:cut]), s.subset(idx[cut:])
+	return a, b, nil
+}
+
+func (s *Set) subset(idx []int) *Set {
+	sub := &Set{Task: s.Task, Labels: slices.Clone(s.Labels), Samples: make([]*Sample, len(idx))}
+	for i, j := range idx {
+		sub.Samples[i] = s.Samples[j]
+	}
+	return sub
 }

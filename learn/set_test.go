@@ -1,0 +1,110 @@
+package learn
+
+import (
+	"errors"
+	"math/rand/v2"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/breskos/gopher-learn/nn"
+)
+
+func TestReadCSVClassification(t *testing.T) {
+	s := NewSet(nn.Classification)
+	err := s.ReadCSV(strings.NewReader("0.1,0.2,A\n0.3,0.4,B\n0.5,0.6,A\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Len() != 3 || s.InputSize() != 2 {
+		t.Fatalf("got %d samples with %d features", s.Len(), s.InputSize())
+	}
+	if !slices.Equal(s.Labels, []string{"A", "B"}) {
+		t.Fatalf("labels = %v", s.Labels)
+	}
+	if got := s.Samples[1]; got.Class != 1 || !slices.Equal(got.Output, []float64{0, 1}) {
+		t.Fatalf("sample 1 = %+v", got)
+	}
+	// samples loaded before a new class appeared must be extended
+	if got := s.Samples[0]; !slices.Equal(got.Output, []float64{1, 0}) {
+		t.Fatalf("sample 0 output = %v", got.Output)
+	}
+}
+
+func TestReadCSVRegression(t *testing.T) {
+	s := NewSet(nn.Regression)
+	if err := s.ReadCSV(strings.NewReader("1,2,0.5\n3,4,0.7\n")); err != nil {
+		t.Fatal(err)
+	}
+	if s.Samples[1].Value != 0.7 || !slices.Equal(s.Samples[1].Output, []float64{0.7}) {
+		t.Fatalf("sample = %+v", s.Samples[1])
+	}
+	if err := s.ReadCSV(strings.NewReader("1,2,x\n")); err == nil {
+		t.Fatal("expected error for invalid target")
+	}
+}
+
+func TestReadCSVErrors(t *testing.T) {
+	s := NewSet(nn.Classification)
+	if err := s.ReadCSV(strings.NewReader("1,abc,A\n")); err == nil {
+		t.Fatal("expected parse error")
+	}
+	s = NewSet(nn.Classification)
+	if err := s.ReadCSV(strings.NewReader("1,2,A\n1,B\n")); err == nil {
+		t.Fatal("expected dimension error")
+	}
+}
+
+func TestReadSVM(t *testing.T) {
+	s := NewSet(nn.Classification)
+	if err := s.ReadSVM(strings.NewReader("+1 1:0.5 3:1\n-1 2:0.25\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.Samples[0].Vector, []float64{0.5, 0, 1}) {
+		t.Fatalf("vector 0 = %v", s.Samples[0].Vector)
+	}
+	if !slices.Equal(s.Samples[1].Vector, []float64{0, 0.25, 0}) {
+		t.Fatalf("vector 1 = %v", s.Samples[1].Vector)
+	}
+	if !slices.Equal(s.Labels, []string{"+1", "-1"}) {
+		t.Fatalf("labels = %v", s.Labels)
+	}
+}
+
+func TestAddUnknownClass(t *testing.T) {
+	s := NewSet(nn.Classification)
+	if err := s.Add(NewClassificationSample([]float64{1}, "X")); !errors.Is(err, ErrUnknownClass) {
+		t.Fatalf("want ErrUnknownClass, got %v", err)
+	}
+	if err := NewSet(nn.Regression).AddClass("A"); !errors.Is(err, ErrTaskMismatch) {
+		t.Fatalf("want ErrTaskMismatch, got %v", err)
+	}
+}
+
+func TestContains(t *testing.T) {
+	s := NewSet(nn.Regression)
+	_ = s.Add(NewRegressionSample([]float64{1, 2}, 0.5))
+	if !s.Contains(NewRegressionSample([]float64{1, 2}, 0.9)) {
+		t.Fatal("expected duplicate vector to be found")
+	}
+	if s.Contains(NewRegressionSample([]float64{2, 1}, 0.5)) {
+		t.Fatal("unexpected match")
+	}
+}
+
+func TestSplit(t *testing.T) {
+	s := NewSet(nn.Regression)
+	for i := range 10 {
+		_ = s.Add(NewRegressionSample([]float64{float64(i)}, 0))
+	}
+	a, b, err := s.Split(0.7, rand.New(rand.NewPCG(1, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Len() != 7 || b.Len() != 3 {
+		t.Fatalf("split = %d/%d", a.Len(), b.Len())
+	}
+	if _, _, err := s.Split(1, nil); err == nil {
+		t.Fatal("expected error for ratio 1")
+	}
+}

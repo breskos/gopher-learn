@@ -1,83 +1,58 @@
-# Encoders (experimental)
+# Encoders
 
-## Overview
-
-**Attention:** Encoders are currently not able to serialize
-
-Encoders means that the incoming data is automatically put into a data vector (processable for the neural net.)
-Encoding of your data into processable feature vectors is very important, because strings are initially not suitable as feature vector.
-This module helps to find a representation of your data set without your intervention.
-Although the encoders can be controlled using by Config parameters in EncoderConfig.
-
-## EncoderConfig
-
-The encoder performs decisions during its runtime.
-For that reason a DefaultConfig is applied.
-It is possible to get the DefaultConfig, overwrite specific parameters and apply it again to the encoder.
-
-```go
-e := encoders.NewEncoder("test encoder")
-cfg := encoders.DefaultConfig()
-cfg.DictionaryMaxEntries = 300
-e.Config = cfg
-```
-You can find all possible options for editting the encoder config in encoders/config.go.
-
-## Example
-Below you can find an example for the encoder.
-
-```go
-// generating the encoder, the encoder can hold different input types and dimensions
-e := encoders.NewEncoder("test encoder")
-cfg := encoders.DefaultConfig()
-cfg.DictionaryMaxEntries = 300
-e.Config = cfg
-inputName := "language-classification"
-set := encoders.NewInput(inputName, encoders.String)
-for _, v := range data {
-    // add your strings here
-    set.AddString(someStringSample)
-}
-// scan takes the set and decides (if it is: encoders.Automatic) which encoding to apply
-e.Scan(inputName, set, encoders.Automatic)
-// transform brings the input into the choosen encoding
-e.Transform(inputName, set)
-// explain can be used to see what the encoder has done
-e.Explain()
-// using encode() and an Unified (can be string or float slice) you get the corresponding vector
-vector := e.Encode(inputName, encoders.Unified{String: "Hello whats up with you?", Type: encoders.String})
-```
-
+Encoders turn raw input such as strings or large float slices into feature vectors a network can process.
+An `Encoder` holds one model per named input dimension, so mixed inputs (for example a text field and a list of measurements) can be encoded with one encoder.
 
 ## Workflow
-This is the workflow. An Encoder can contain different models for encoding. In the workflow below, (namespace) means that you perform an action on a namespace within the encoder. For example, if you have a mixed input vector with strings and floats, you an put all floats together in one namespace as well as the string.
 
-1. Collect data - The encoder needs the samples from the test or a similar set of data points to optimally fit and decide.
-1. Create Encoder - create an encoder with the config (the Encoder itself can encode different inputs)
-2. Scanner - (namespace) decides which Encoder to select if you choose encoders.Automatic, if not, the given Encoder will be applied
-3. Transform - (namespace) After scanning the set and deciding the data is tranformed into the new vector space
-4. After transformation is done, you are ready to go with your new vector representation
-5. Using - Encode() (namespace) method of the encoder the encode your input.
+1. Collect sample data of the input.
+2. `Scan` decides which model to use. With `encoders.Automatic` the decision is made from the data; otherwise the given type is used.
+3. `Fit` learns the model from the sample data. If the dimension was not scanned before, `Fit` scans automatically.
+4. `Encode`, `EncodeString` or `EncodeFloats` turn new values into feature vectors.
 
-## Encoders
-If you have no specific idea which encoder to use you can also run using encoders.Automatic.
-Using this the encoder will figure out by itself which encoding is applicable.
+```go
+enc := encoders.New("questions")
+in := encoders.NewInput(encoders.String)
+for _, q := range questions {
+	in.AddString(q)
+}
+if err := enc.Fit("question", in); err != nil { // automatic scan
+	return err
+}
+_ = enc.Explain(os.Stdout)
 
-The encoders work for different data types:
+vector, err := enc.EncodeString("question", "Was ist ein Haus?")
+```
 
-1. N-Grams (strings), encoders.StringNGrams
-2. Splitted Dictionary (string), encoders.StringSplitDictionary
-3. Dictionary (strings), encoders.StringDictionary
-4. FloatExact (numbers), encoders.FloatExact
-5. FloatReducer (numbers), encoders.FloatReducer
-6. Topic Modelling coming soon (strings) - not implemented yet
+Encoders are saved and loaded with `persist.SaveEncoder` and `persist.LoadEncoder`.
 
+## Models
 
-## Representation (experimental)
+| Type | Input | Encoding |
+| --- | --- | --- |
+| `StringDictionary` | string | One-hot over the distinct normalized strings |
+| `StringSplitDictionary` | string | Multi-hot over the distinct tokens |
+| `StringNGrams` | string | Multi-hot over the most frequent character n-grams |
+| `FloatExact` | floats | Passed through unchanged |
+| `FloatReducer` | floats | Drops constant dimensions and dimensions highly rank-correlated (Spearman) with an earlier kept one |
 
-Out of the encoder activity the network generates a representation of the input space.
-This representation can be persisted and loaded to continue working on the network.
-This representation looks like this:
+Strings are normalized before encoding: they are lowercased and every run of characters that are not letters or digits becomes a single space. Unicode letters such as umlauts are kept. Unknown strings, tokens or n-grams encode to zeros.
 
-1. Number of feature vectors
-2. Mapping of value to neuron values
+## Automatic selection
+
+For float input `Automatic` selects `FloatExact`. For strings the heuristics in `Config` decide:
+
+1. `StringDictionary` if there are at most `DictionaryMaxEntries` distinct strings with at most `DictionaryMaxTokens` tokens each,
+2. `StringSplitDictionary` if there are fewer than `SplitDictionaryMaxEntries` distinct tokens,
+3. `StringNGrams` if no string is longer than `NGramMaxLength` characters,
+4. `DefaultStringEncoder` otherwise.
+
+## Config
+
+`encoders.New` applies `encoders.DefaultConfig()`. Change fields before calling `Scan` and `Fit`:
+
+```go
+enc := encoders.New("test")
+enc.Config.DictionaryMaxEntries = 300
+enc.Config.NGramSize = 4
+```
