@@ -116,6 +116,40 @@ func TestQuality(t *testing.T) {
 	}
 }
 
+// sensorConfig is used for the applied sensor data sets, which are all
+// standardized before training.
+func sensorConfig(c *engine.Config) {
+	c.Epochs, c.LearningRate, c.Decay, c.RegressionThreshold = 15, 0.2, 0.05, 0.05
+}
+
+func TestSensorQuality(t *testing.T) {
+	if testing.Short() {
+		t.Skip("quality tests train real models")
+	}
+	cases := []qualityCase{
+		{path: "sensors/predictive-maintenance.csv", min: 0.90, measure: accuracy}, // measured 0.975
+		{path: "sensors/activity.csv", min: 0.90, measure: accuracy},               // measured 0.986
+		{path: "sensors/room-climate.csv", min: 0.95, measure: accuracy},           // measured 0.995
+		{path: "sensors/sensor-health.csv", min: 0.75, measure: balancedAccuracy},  // measured 0.883
+		{path: "sensors/wifi-localization.csv", min: 0.95, measure: accuracy},      // measured 0.984
+		// regression: share of predictions within 0.05 of the target
+		{path: "sensors/run-to-failure.csv", min: 0.60, measure: accuracy},          // measured 0.701
+		{path: "sensors/air-quality-calibration.csv", min: 0.85, measure: accuracy}, // measured 0.945
+		{path: "sensors/smart-meter.csv", min: 0.60, measure: accuracy},             // measured 0.751
+	}
+	for _, c := range cases {
+		c.rows, c.hidden, c.scale, c.cfg = 4000, []int{24}, true, sensorConfig
+		t.Run(c.path, func(t *testing.T) {
+			eval, took := train(t, c)
+			got := c.measure(eval)
+			t.Logf("%s: %.3f in %v", c.path, got, took.Round(time.Millisecond))
+			if got < c.min {
+				t.Fatalf("quality %.3f below %.3f", got, c.min)
+			}
+		})
+	}
+}
+
 func TestScalingHelpsUnscaled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("quality tests train real models")

@@ -13,7 +13,7 @@ import (
 
 // All returns every data set in a stable order.
 func All() []Dataset {
-	return []Dataset{
+	sets := []Dataset{
 		blobs(), imbalanced(), spirals(), highDim(),
 		friedman1(), unscaled(),
 		drift(),
@@ -21,6 +21,7 @@ func All() []Dataset {
 		messySemicolon(), messyMissing(), sparseSVM(),
 		large(),
 	}
+	return append(sets, sensors()...)
 }
 
 func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
