@@ -22,6 +22,7 @@ Tabular essentials. See the [roadmap](ROADMAP.md) for the remaining parts of thi
 - **Quality tests** train models on the synthetic data and fail if the accuracy on a held-out test set drops below fixed thresholds. Online tests feed the streams row by row to `online.Online` and check that each stream is learnable before its drift and that the drift is real. `go test -short` skips them.
 
 ### Changed
+- The `engine` trains on `nn.Fit`: each try is one run whose schedule lowers the learning rate after every round and whose epoch callback evaluates the validation split at the end of a round. New `engine.Config` fields: `Optimizer` (a function returning a fresh optimizer per try; default SGD as before) and `WeightDecay`. A diverging try ends early with a warning instead of training on with NaN weights.
 - `engine` and `online` split classification data stratified, so rare classes are always present in training and validation.
 - Empty CSV fields are reported as missing values, naming the column.
 - The wine-quality example holds back a test set and standardizes the features.

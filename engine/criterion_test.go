@@ -51,6 +51,7 @@ func TestConfigValidateCases(t *testing.T) {
 		"split":  func(c *Config) { c.TrainingSplit = 1 },
 		"lr":     func(c *Config) { c.LearningRate = 0 },
 		"decay":  func(c *Config) { c.Decay = -1 },
+		"l2":     func(c *Config) { c.WeightDecay = -1 },
 	}
 	for name, mutate := range cases {
 		cfg := DefaultConfig()
