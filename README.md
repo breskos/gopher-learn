@@ -1,213 +1,114 @@
 # gopher-learn
 
-![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png " The Gopher Neural logo ")
+[![Go Reference](https://pkg.go.dev/badge/github.com/breskos/gopher-learn.svg)](https://pkg.go.dev/github.com/breskos/gopher-learn)
+[![CI](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## Quickstart
+![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png "The gopher-learn logo")
 
-- See examples here: https://github.com/breskos/gopher-learn/tree/master/examples
+Neural networks in pure Go, with no dependencies outside the standard library.
 
-## What is gopher-learn?
-
-- Artificial neural network written in Golang with training / testing framework
-- Rich measurement mechanisms to control the training
-- Examples for fast understanding
-- Can also be used for iterative online learning (using online module) for autonomous agents
-- Encoders can be used to encoder string data or massive float slices
+- Feed-forward networks (multi-layer perceptrons) on dense matrices with biases, sigmoid, tanh, ReLU, linear and softmax activations, and mini-batch gradient descent
+- A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
+- Online learning: inject samples one by one, for streams and autonomous agents
+- Encoders that turn strings and large float vectors into feature vectors
+- Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
+- Versioned JSON persistence for networks, data sets, online learners and encoders
 
 ## Install
 
 ```
-  go get github.com/breskos/gopher-learn/...
+go get github.com/breskos/gopher-learn@latest
 ```
 
-## Examples
+Requires Go 1.24 or newer.
 
-Find the examples in the examples folder.
-All the data to run the examples [can be found here](https://github.com/breskos/gopher-learn-data).
+## Packages
 
-## The gopher-learn engine
+| Package | Purpose |
+| --- | --- |
+| [`nn`](nn) | The neural network: create, train, predict |
+| [`learn`](learn) | Data sets and samples, CSV and LIBSVM loaders |
+| [`engine`](engine) | Batch training with learning rate decay and model selection |
+| [`online`](online) | Continuous training from a stream of samples |
+| [`evaluation`](evaluation) | Metrics and reports |
+| [`encoders`](encoders) | Feature encoding for strings and float vectors |
+| [`persist`](persist) | Save and load everything as JSON |
 
-The engine helps you with optimizing the learning process.
-Basically it starts with a high learning rate to make fast progress in the beginning.
-After some rounds of learning (epochs) the learning rate declines (decay).
-During the process the best network is saved.
-After engine finished training you receive the ready to go network.
+## Quickstart
 
-## Modes
-
-Gopher-neural can be used to perform classification and regression. This sections helps to set up both modes. In general, you have to take care about the differences between both modes during these parts: read training data from file, start engine, use evaluation modes and perform in production.
-
-### Classification
-
-#### Read training data from file
+Train a classifier from a CSV file whose last column is the class label:
 
 ```go
-data := learn.NewSet(neural.Classification)
-ok, err := data.LoadFromCSV(dataFile)
-```
+package main
 
-#### Start engine
-
-This uses the standard config of the engine.
-For finetuning use e.SetConfig() to set your own config.
-
-```go
-e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
-e.SetVerbose(true)
-e.Start(neural.Distance)
-```
-
-#### Use evalation mode
-
-```go
-evaluation.PrintSummary("name of class1")
-evaluation.PrintSummary("name of class2")
-evaluation.PrintConfusionMatrix()
-```
-
-#### Perform in production
-
-```go
-x := net.CalculateWinnerLabel(vector)
-```
-
-### Regression
-
-Important note: Use regression just with a target value between 0 and 1.
-
-#### Read training data from file
-
-```go
-data := learn.NewSet(neural.Regression)
-ok, err := data.LoadFromCSV(dataFile)
-```
-
-#### Start engine
-
-This uses the standard config of the engine.
-For finetuning use e.SetConfig() to set your own config.
-
-```go
-e := engine.NewEngine(neural.Regression, []int{hiddenNeurons}, data)
-e.SetVerbose(true)
-e.Start(neural.Distance)
-```
-
-#### Use evalation mode
-
-```go
-evaluation.GetRegressionSummary()
-```
-
-#### Perform in production
-
-```go
-x := net.Calculate(vector)
-```
-
-## Criterions
-
-To let the engine decide for the best model, a few criterias were implemented. They are listed below together with a short regarding their application:
-
-- **Accuracy** - uses simple accuracy calculation to decide the best model. Not suitable with unbalanced data sets.
-- **BalancedAccuracy** - uses balanced accuracy. Suitable for unbalanced data sets.
-- **FMeasure** - uses F1 score. Suitable for unbalanced data sets.
-- **Simple** - uses simple correct classified divided by all classified samples. Suitable for regression with thresholding.
-- **Distance** - uses distance between ideal output and current output. Suitable for regression.
-
-```go
-...
-e := engine.NewEngine(neural.Classification, []int{100}, data)
-e.Start(neural.Distance, tries, epochs, trainingSplit, learningRate, decay)
-...
-```
-
-## Some more basics
-
-### Train a network using engine
-
-Using the engine makes sense for you if you want to fully use the training framework that gopher-learn offers you.
-With engine package the network is learned using learning rate, decay, epochs.
-Also in the engine you can choose between the criteria options to find the best network.
-
-```go
 import (
-	"fmt"
+	"context"
+	"log"
+	"os"
 
-	"github.com/breskos/gopher-learn"
 	"github.com/breskos/gopher-learn/engine"
 	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/persist"
 )
 
-const (
-	dataFile      = "data.csv"
-	networkFile   = "network.json"
-	tries         = 1
-	epochs        = 100
-	trainingSplit = 0.7
-	learningRate  = 0.6
-	decay         = 0.005
-  hiddenNeurons = 20
-)
-
 func main() {
-	data := learn.NewSet(neural.Classification)
-	ok, err := data.LoadFromCSV(dataFile)
-	if !ok || nil != err {
-		fmt.Printf("something went wrong -> %v", err)
+	data := learn.NewSet(nn.Classification)
+	if err := data.LoadCSV("data.csv"); err != nil {
+		log.Fatal(err)
 	}
-	e := engine.NewEngine(neural.Classification, []int{hiddenNeurons}, data)
-	e.SetVerbose(true)
-	e.SetConfig(&engine.Config{
-		Tries:               tries,
-		Epochs:              epochs,
-		TrainingSplit:       trainingSplit,
-		LearningRate:        learningRate,
-		Decay:               decay,
-	})
-	e.Start(neural.Distance)
-	network, evaluation := e.GetWinner()
 
-	evaluation.PrintSummary("name of class1")
-	evaluation.PrintSummary("name of class2")
-
-	err = persist.ToFile(networkFile, network)
+	e, err := engine.New(data, []int{20}, engine.DefaultConfig())
 	if err != nil {
-		fmt.Printf("error while saving network: %v\n", err)
+		log.Fatal(err)
 	}
-	network2, err := persist.FromFile(networkFile)
-	if err != nil {
-		fmt.Printf("error while loading network: %v\n", err)
+	if err := e.Run(context.Background(), engine.FMeasure); err != nil {
+		log.Fatal(err)
 	}
-  // check the network with the first sample
-	w := network2.CalculateWinnerLabel(data.Samples[0].Vector)
-	fmt.Printf("%v -> %v\n", data.Samples[0].Label, w)
 
-  fmt.Println(" * Confusion Matrix *")
-	evaluation.PrintConfusionMatrix()
+	network, eval := e.Winner()
+	_ = eval.WriteSummaries(os.Stdout)
+	_ = eval.WriteConfusionMatrix(os.Stdout)
+
+	if err := persist.SaveNetwork("network.json", network); err != nil {
+		log.Fatal(err)
+	}
+
+	label, err := network.Classify(data.Samples[0].Vector)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("%s -> %s", data.Samples[0].Label, label)
 }
-
 ```
 
-### Create simple network for classification
+For regression use `learn.NewSet(nn.Regression)`, choose `engine.Distance` as criterion and call `network.Predict(vector)`. With the default sigmoid output layer, targets must lie in [0, 1]; set `Config.OutputActivation = nn.Linear` for unbounded targets.
+
+### Using the network directly
 
 ```go
-
-  import "github.com/breskos/gopher-learn/net"
-  // Network has 9 enters and 3 layers
-  // ( 9 neurons, 9 neurons and 2 neurons).
-  // Last layer is network output (2 neurons).
-  // For these last neurons we need labels (like: spam, nospam, positive, negative)
-  labels := make(map[int]string)
-  labels[0] = "positive"
-  labels[1] = "negative"
-  n := net.NewNetwork(9, []int{9,9,2}, map[int])
-  // Randomize sypaseses weights
-  n.RandomizeSynapses()
-
-  // now you can calculate on this network (of course it is not trained yet)
-  // (for the training you can use then engine)
-  result := n.Calculate([]float64{0,1,0,1,1,1,0,1,0})
-
+net, err := nn.New(nn.Config{
+	Inputs:           2,
+	Hidden:           []int{8},
+	Labels:           []string{"same", "different"},
+	HiddenActivation: nn.Tanh,
+	OutputActivation: nn.Softmax,
+})
+// ...
+loss, err := net.TrainBatch(inputs, targets, 0.5)
+label, err := net.Classify([]float64{0, 1})
 ```
+
+## Documentation
+
+- [Engine](docs/engine.md)
+- [Online learning](docs/online.md)
+- [Evaluation](docs/evaluation.md)
+- [Encoders](docs/encoders.md)
+- [Examples](examples), with data in [gopher-learn-data](https://github.com/breskos/gopher-learn-data)
+- [Changelog](CHANGELOG.md), including the migration guide from 0.3
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE). Versions up to and including v0.3.0 were released under the GPL-3.0.

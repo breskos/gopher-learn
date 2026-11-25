@@ -1,60 +1,71 @@
 package encoders
 
+import (
+	"fmt"
+	"slices"
+)
+
+// InputType is the kind of raw input.
 type InputType int
 
 const (
+	// String input.
 	String InputType = iota
+	// Floats input (a slice of float64).
 	Floats
 )
 
-func (e InputType) String() string {
-	return [...]string{"String", "Floats"}[e]
+var inputTypeNames = [...]string{"string", "floats"}
+
+// String returns the name of the input type.
+func (t InputType) String() string {
+	if t < 0 || int(t) >= len(inputTypeNames) {
+		return fmt.Sprintf("InputType(%d)", int(t))
+	}
+	return inputTypeNames[t]
 }
 
-type Inputs struct {
-	Inputs []*Input
+// MarshalText implements encoding.TextMarshaler.
+func (t InputType) MarshalText() ([]byte, error) {
+	if t < 0 || int(t) >= len(inputTypeNames) {
+		return nil, fmt.Errorf("encoders: invalid input type %d", int(t))
+	}
+	return []byte(inputTypeNames[t]), nil
 }
 
-type Input struct {
-	Name   string
-	Values []*Unified
-	Type   InputType
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (t *InputType) UnmarshalText(b []byte) error {
+	i := slices.Index(inputTypeNames[:], string(b))
+	if i < 0 {
+		return fmt.Errorf("encoders: unknown input type %q", b)
+	}
+	*t = InputType(i)
+	return nil
 }
 
-type Unified struct {
+// Value is a single raw input value.
+type Value struct {
 	String string
-	Float  []float64
+	Floats []float64
+}
+
+// Input is a collection of sample values of one type used for fitting.
+type Input struct {
 	Type   InputType
-	Label  string
-	Target float64
+	Values []Value
 }
 
-func NewInputs() *Inputs {
-	return &Inputs{
-		Inputs: make([]*Input, 0),
-	}
+// NewInput creates an empty input of the given type.
+func NewInput(t InputType) *Input {
+	return &Input{Type: t}
 }
 
-func (i *Inputs) Add(input *Input) {
-	i.Inputs = append(i.Inputs, input)
+// AddString appends a string sample.
+func (in *Input) AddString(s string) {
+	in.Values = append(in.Values, Value{String: s})
 }
 
-func NewInput(name string, t InputType) *Input {
-	return &Input{
-		Name:   name,
-		Type:   t,
-		Values: make([]*Unified, 0),
-	}
-}
-
-func (i *Input) Add(unified *Unified) {
-	i.Values = append(i.Values, unified)
-}
-
-func (i *Input) AddFloats(sample []float64) {
-	i.Values = append(i.Values, &Unified{Float: sample, Type: Floats})
-}
-
-func (i *Input) AddString(sample string) {
-	i.Values = append(i.Values, &Unified{String: sample, Type: String})
+// AddFloats appends a float slice sample.
+func (in *Input) AddFloats(f []float64) {
+	in.Values = append(in.Values, Value{Floats: f})
 }
