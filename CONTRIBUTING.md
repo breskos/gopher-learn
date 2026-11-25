@@ -35,6 +35,14 @@ The loaders are fuzz tested. To fuzz locally:
 go test -run='^$' -fuzz='^FuzzReadCSV$' -fuzztime=30s ./learn/
 ```
 
+Quality tests train real models on synthetic data and take a few seconds; `go test -short ./...` skips them. If a change lowers the measured quality, the test fails with the value it reached.
+
+Synthetic data sets with known structure come from `internal/synth`. To write them as files, for example for benchmarks:
+
+```
+go run ./internal/cmd/gendata -out ../gopher-learn-data/synthetic
+```
+
 Example programs live in [examples](examples); their data is in [gopher-learn-data](https://github.com/breskos/gopher-learn-data).
 
 ## Pull requests

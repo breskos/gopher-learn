@@ -75,3 +75,70 @@ func ExampleSet_Split() {
 	// Output:
 	// 8 2
 }
+
+func ExampleSet_ReadCSV_header() {
+	csv := `id,acidity,sugar,quality
+1,7.4,1.9,0.5
+2,7.8,2.6,0.6
+`
+	set := learn.NewSet(nn.Regression)
+	err := set.ReadCSV(strings.NewReader(csv), learn.WithTarget("quality"), learn.WithIgnore("id"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("features:", set.Features)
+	fmt.Println(set.Samples[1].Vector, "->", set.Samples[1].Value)
+	// Output:
+	// features: [acidity sugar]
+	// [7.8 2.6] -> 0.6
+}
+
+func ExampleFitScaler() {
+	set := learn.NewSet(nn.Regression)
+	_ = set.Add(learn.NewRegressionSample([]float64{10, 0.1}, 0.2))
+	_ = set.Add(learn.NewRegressionSample([]float64{30, 0.3}, 0.4))
+	_ = set.Add(learn.NewRegressionSample([]float64{20, 0.2}, 0.6))
+
+	// Fit on training data only, then apply the same scaler everywhere.
+	scaler, err := learn.FitScaler(set, learn.MinMax)
+	if err != nil {
+		panic(err)
+	}
+	scaled, _ := scaler.TransformSet(set)
+	for _, s := range scaled.Samples {
+		fmt.Printf("[%.2f %.2f]\n", s.Vector[0], s.Vector[1])
+	}
+	v, _ := scaler.Transform([]float64{25, 0.25})
+	fmt.Printf("new sample: [%.2f %.2f]\n", v[0], v[1])
+	// Output:
+	// [0.00 0.00]
+	// [1.00 1.00]
+	// [0.50 0.50]
+	// new sample: [0.75 0.75]
+}
+
+func ExampleSet_KFold() {
+	set := learn.NewSet(nn.Classification)
+	_ = set.AddClass("a")
+	_ = set.AddClass("b")
+	for i := range 12 {
+		label := "a"
+		if i%3 == 0 {
+			label = "b"
+		}
+		_ = set.Add(learn.NewClassificationSample([]float64{float64(i)}, label))
+	}
+	folds, err := set.KFold(4, rand.New(rand.NewPCG(1, 1)))
+	if err != nil {
+		panic(err)
+	}
+	for i, f := range folds {
+		d := f.Test.Distribution()
+		fmt.Printf("fold %d: train %d, test %d (a=%d, b=%d)\n", i, f.Train.Len(), f.Test.Len(), d["a"], d["b"])
+	}
+	// Output:
+	// fold 0: train 9, test 3 (a=2, b=1)
+	// fold 1: train 9, test 3 (a=2, b=1)
+	// fold 2: train 9, test 3 (a=2, b=1)
+	// fold 3: train 9, test 3 (a=2, b=1)
+}
