@@ -15,7 +15,8 @@ Neural networks in pure Go, with no dependencies outside the standard library. F
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
-- Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
+- Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy, ROC-AUC, log loss, RMSE, R² and more
+- Model selection and explainability: grid and random hyperparameter search with cross-validation, permutation feature importance
 - Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
 
 ## Performance
@@ -50,6 +51,26 @@ label, err := n.NewPredictor().Classify(reading) // no allocation
 
 A motor fault detector with 234 parameters is a 1 KB model file; the complete device program is 1.5 to 1.9 MB and classifies 1.5 million readings per second on one core of an M1. CI builds for ARMv7, RISC-V and WebAssembly and runs the tests on 32-bit.
 
+## Explainability
+
+Which inputs does a model rely on? `explain.Permutation` shuffles one feature at a time and measures how much worse the model gets ([guide](docs/explain.md)):
+
+```go
+imp, _ := m.Importance(testRecords, explain.Config{}) // or explain.Permutation(network, testSet, …)
+for _, f := range imp {
+	fmt.Printf("%-8s %.3f ± %.3f\n", f.Feature, f.Mean, f.Std)
+}
+```
+
+```
+income   0.326 ± 0.021   ← 33 accuracy points lost without it
+x        0.243 ± 0.015
+color    0.186 ± 0.009
+noise    0.002 ± 0.003   ← unused
+```
+
+It works for every model, needs no retraining, runs on all cores and exposes data leaks: a column that is only known after the outcome stands out with a far higher importance than everything else.
+
 ## Install
 
 ```
@@ -69,6 +90,8 @@ Requires Go 1.24 or newer.
 | [`online`](online) | Continuous training from a stream of samples |
 | [`drift`](drift) | Concept drift detection: ADWIN and Page-Hinkley |
 | [`evaluation`](evaluation) | Metrics and reports |
+| [`tune`](tune) | Hyperparameter search with cross-validation |
+| [`explain`](explain) | Permutation feature importance |
 | [`encoders`](encoders) | Feature encoding for strings and float vectors |
 | [`persist`](persist) | Save and load everything as JSON |
 
@@ -182,6 +205,8 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
+- [Model selection](docs/selection.md)
+- [Explainability](docs/explain.md)
 - [Performance](docs/performance.md)
 - [Embedded systems](docs/embedded.md)
 - [Engine](docs/engine.md)
