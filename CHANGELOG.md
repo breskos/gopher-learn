@@ -1,9 +1,11 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] Unreleased
+## [0.7.0] 2026-11-25
 
 Performance and robustness: faster on large networks, as fast on tiny ones, no allocations at inference, float32 models for small devices and protection against bad data. See [docs/performance.md](docs/performance.md) and [docs/embedded.md](docs/embedded.md).
+
+No breaking API changes. Files written by `persist` keep format version 2.
 
 ### Performance (Apple M1, against v0.6)
 | | v0.6 | v0.7 |
