@@ -1,29 +1,48 @@
 # Engine
 
-## Overview
-
-Engine triggers the training of the neural network and returns the winner network.
-With engine you can use a training set to train the network.
-
-## Why using an engine?
-
-If you want to successfully train a neural network you need a lot of parameters doing the right things.
-Engine was defined to bake your neural network based on your given data.
-Instead of fine tuning parameters and split data sets on your own, you can use the engine for that.
-
-See examples **sonar** and **wine-quality** for more insights on the engine.
-
-## Config in Engine
-Engine comes with a default config.
-For classification tasks the default configuration should fit.
-On the other hand for regression you should set Config that fits your data set.
-Handling of the config is shown in the examples.
-
-## Rough pseudo code description
+The engine trains networks on a data set and keeps the best one.
+Instead of tuning learning rates and splitting data by hand, you hand the engine a `learn.Set` and a `Config`.
 
 ```go
-// one epoch is defined as one forward pass and one backward pass of all the training examples
-for number of #try (tries)
-  for learningRate minus decay if decay is not 0
-    for num of #epochs the network sees the training set
+cfg := engine.DefaultConfig()
+cfg.Seed = 42 // reproducible runs
+cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+e, err := engine.New(data, []int{100}, cfg)
+if err != nil {
+	return err
+}
+if err := e.Run(ctx, engine.FMeasure); err != nil {
+	return err
+}
+network, eval := e.Winner()
 ```
+
+`Run` can be cancelled through the context; the best network found so far stays available through `Winner`.
+
+## Training loop
+
+```
+split data into training and validation (Config.TrainingSplit)
+for each try (Config.Tries), starting from a freshly initialized network:
+    for learningRate := LearningRate; learningRate > 0; learningRate -= Decay:
+        train Epochs epochs on the shuffled training set (mini-batches of BatchSize)
+        evaluate on the validation set
+        keep a copy of the network if it beats the best one so far
+```
+
+## Criteria
+
+| Criterion | Picks the network with the highest … | Suited for |
+| --- | --- | --- |
+| `Accuracy` | mean per-class accuracy | balanced classification |
+| `BalancedAccuracy` | mean balanced accuracy | unbalanced classification |
+| `FMeasure` | macro F1 score | unbalanced classification |
+| `Simple` | ratio of correct predictions | regression with threshold |
+| `Distance` | lowest distance to the targets | regression, classification |
+
+## Config
+
+The defaults fit most small classification tasks. For regression, set `RegressionThreshold` and tune `LearningRate` and `Decay` to your data.
+`HiddenActivation` and `OutputActivation` select the activation functions (`nn.Sigmoid`, `nn.Tanh`, `nn.ReLU`, `nn.Linear`, `nn.Softmax`); both default to sigmoid.
+For classification, `nn.Softmax` on the output layer trains with cross-entropy and usually converges faster.

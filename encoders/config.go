@@ -1,41 +1,45 @@
 package encoders
 
-type EncoderConfig struct {
-	DelimiterToken    string
-	DimToSamplesRatio float64
-	// Decision heuristics
-	FloatReducerThreshold     int
-	TopicModelMinDelimiters   int
-	NGramsMaxTokens           int
-	DictionaryMaxEntries      int
-	DictionaryMaxDelimiters   int
-	SplitDictionaryMaxEntries int
-	// Application settings
-	FloatReducerSpearman   float64
-	FloatReducerSkewness   float64
-	FloatReducerZeroValues bool
-	NGramMaxGrams          int
-	NGramMaxCapacity       int
-	NGramCropRatio         float64
-	DefaultStringEncoder   EncoderType
+// Config holds the heuristics used by Scan and the parameters of the models.
+type Config struct {
+	// DictionaryMaxEntries is the maximum number of distinct strings for
+	// which Scan chooses StringDictionary.
+	DictionaryMaxEntries int `json:"dictionary_max_entries"`
+	// DictionaryMaxTokens is the maximum number of tokens per string for
+	// which Scan chooses StringDictionary.
+	DictionaryMaxTokens int `json:"dictionary_max_tokens"`
+	// SplitDictionaryMaxEntries is the maximum number of distinct tokens for
+	// which Scan chooses StringSplitDictionary.
+	SplitDictionaryMaxEntries int `json:"split_dictionary_max_entries"`
+	// NGramMaxLength is the maximum string length for which Scan chooses StringNGrams.
+	NGramMaxLength int `json:"ngram_max_length"`
+	// DefaultStringEncoder is chosen by Scan if no heuristic matches.
+	DefaultStringEncoder Type `json:"default_string_encoder"`
+
+	// NGramSize is the number of characters per n-gram.
+	NGramSize int `json:"ngram_size"`
+	// NGramMaxCapacity is the maximum number of n-grams kept.
+	NGramMaxCapacity int `json:"ngram_max_capacity"`
+	// NGramCropRatio drops n-grams occurring in a smaller ratio of samples,
+	// applied only if the vocabulary exceeds NGramMaxCapacity.
+	NGramCropRatio float64 `json:"ngram_crop_ratio"`
+
+	// FloatReducerCorrelation drops a dimension if its absolute Spearman
+	// correlation with an already kept dimension is at least this value.
+	FloatReducerCorrelation float64 `json:"float_reducer_correlation"`
 }
 
-func DefaultConfig() *EncoderConfig {
-	return &EncoderConfig{
-		DelimiterToken:            " ",
-		DimToSamplesRatio:         0.8,
-		FloatReducerThreshold:     40,
-		TopicModelMinDelimiters:   5,
-		NGramsMaxTokens:           20,
+// DefaultConfig returns the default configuration.
+func DefaultConfig() Config {
+	return Config{
 		DictionaryMaxEntries:      50,
-		DictionaryMaxDelimiters:   5,
+		DictionaryMaxTokens:       5,
 		SplitDictionaryMaxEntries: 100,
-		FloatReducerSpearman:      0.90,
-		FloatReducerSkewness:      0.90,
-		FloatReducerZeroValues:    true,
-		NGramMaxGrams:             3,
+		NGramMaxLength:            20,
+		DefaultStringEncoder:      StringNGrams,
+		NGramSize:                 3,
 		NGramMaxCapacity:          100,
 		NGramCropRatio:            0.05,
-		DefaultStringEncoder:      StringNGrams,
+		FloatReducerCorrelation:   0.9,
 	}
 }

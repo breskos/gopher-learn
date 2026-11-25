@@ -18,3 +18,6 @@
 todo
 *.phrase
 *.json
+
+# coverage
+coverage.out
