@@ -44,18 +44,29 @@ func FuzzReadCSV(f *testing.F) {
 		"1,2\n1,2,3\n",
 		"",
 		",\n",
+		"a,b,y\n1,2,A\n",
+		"id,x,y\n1,,A\n",
 	} {
-		f.Add(seed, false)
-		f.Add(seed, true)
+		for _, header := range []bool{false, true} {
+			f.Add(seed, false, header)
+			f.Add(seed, true, header)
+		}
 	}
-	f.Fuzz(func(t *testing.T, data string, regression bool) {
+	f.Fuzz(func(t *testing.T, data string, regression, header bool) {
 		task := nn.Classification
 		if regression {
 			task = nn.Regression
 		}
 		s := NewSet(task)
-		if err := s.ReadCSV(strings.NewReader(data)); err != nil {
+		var opts []CSVOption
+		if header {
+			opts = append(opts, WithHeader())
+		}
+		if err := s.ReadCSV(strings.NewReader(data), opts...); err != nil {
 			return
+		}
+		if header && len(s.Features) != s.InputSize() && s.Len() > 0 {
+			t.Fatalf("features %v do not match input size %d", s.Features, s.InputSize())
 		}
 		checkSet(t, s)
 	})

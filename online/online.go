@@ -190,7 +190,7 @@ func (o *Online) Iterate(ctx context.Context) (float64, error) {
 		return 0, ErrNotEnoughData
 	}
 	rng := o.random()
-	training, testing, err := o.Data.Split(o.Config.TrainingSplit, rng)
+	training, testing, err := o.Data.StratifiedSplit(o.Config.TrainingSplit, rng)
 	if err != nil {
 		return 0, err
 	}

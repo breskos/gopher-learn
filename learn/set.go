@@ -21,9 +21,12 @@ var (
 
 // Set is a collection of samples for one task.
 type Set struct {
-	Task    nn.Task   `json:"task"`
-	Labels  []string  `json:"labels,omitempty"`
-	Samples []*Sample `json:"samples"`
+	Task nn.Task `json:"task"`
+	// Labels holds the class labels in the order of the network outputs.
+	Labels []string `json:"labels,omitempty"`
+	// Features optionally names the features, e.g. from a CSV header.
+	Features []string  `json:"features,omitempty"`
+	Samples  []*Sample `json:"samples"`
 
 	index map[uint64]struct{}
 }
@@ -170,7 +173,7 @@ func (s *Set) Split(ratio float64, rng *rand.Rand) (*Set, *Set, error) {
 }
 
 func (s *Set) subset(idx []int) *Set {
-	sub := &Set{Task: s.Task, Labels: slices.Clone(s.Labels), Samples: make([]*Sample, len(idx))}
+	sub := &Set{Task: s.Task, Labels: slices.Clone(s.Labels), Features: slices.Clone(s.Features), Samples: make([]*Sample, len(idx))}
 	for i, j := range idx {
 		sub.Samples[i] = s.Samples[j]
 	}

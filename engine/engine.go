@@ -157,7 +157,7 @@ func (e *Engine) Winner() (*nn.Network, *evaluation.Evaluation) {
 // network found so far stays available through Winner.
 func (e *Engine) Run(ctx context.Context, criterion Criterion) error {
 	rng := train.NewRand(e.cfg.Seed)
-	training, validation, err := e.data.Split(e.cfg.TrainingSplit, rng)
+	training, validation, err := e.data.StratifiedSplit(e.cfg.TrainingSplit, rng)
 	if err != nil {
 		return err
 	}

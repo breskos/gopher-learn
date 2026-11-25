@@ -2,8 +2,6 @@ package learn
 
 import (
 	"bufio"
-	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,47 +10,6 @@ import (
 
 	"github.com/breskos/gopher-learn/nn"
 )
-
-// LoadCSV reads samples from a CSV file. See ReadCSV.
-func (s *Set) LoadCSV(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	return s.ReadCSV(f)
-}
-
-// ReadCSV reads samples in CSV format. All columns except the last are
-// features. The last column is the class label for classification or the
-// target value for regression. Unknown classes are registered in order of
-// appearance.
-func (s *Set) ReadCSV(r io.Reader) error {
-	cr := csv.NewReader(bufio.NewReader(r))
-	cr.ReuseRecord = true
-	for line := 1; ; line++ {
-		record, err := cr.Read()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if len(record) < 2 {
-			return fmt.Errorf("learn: line %d: need at least one feature and a target", line)
-		}
-		last := len(record) - 1
-		vector := make([]float64, last)
-		for i, field := range record[:last] {
-			if vector[i], err = strconv.ParseFloat(strings.TrimSpace(field), 64); err != nil {
-				return fmt.Errorf("learn: line %d column %d: %w", line, i+1, err)
-			}
-		}
-		if err := s.addParsed(vector, strings.TrimSpace(record[last])); err != nil {
-			return fmt.Errorf("learn: line %d: %w", line, err)
-		}
-	}
-}
 
 // LoadSVM reads samples from a file in LIBSVM format. See ReadSVM.
 func (s *Set) LoadSVM(path string) error {

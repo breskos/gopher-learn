@@ -1,7 +1,22 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.4.1] Unreleased
+## [0.5.0] Unreleased
+
+Tabular essentials. See the [roadmap](ROADMAP.md) for the remaining parts of this release.
+
+### Added
+- **CSV options** for `learn.Set.ReadCSV` and `LoadCSV`: `WithHeader`, `WithTarget(name)`, `WithTargetColumn(index)`, `WithIgnore(names...)`, `WithIgnoreColumns(indices...)` and `WithComma(rune)`. Without options the behavior is unchanged. Header names are stored in the new `Set.Features` field.
+- **Feature scaling:** `learn.FitScaler` with `learn.Standardize` (zero mean, unit variance) and `learn.MinMax` (range [0, 1]). A `Scaler` transforms vectors and whole sets, can invert the transformation and serializes to JSON.
+- **Stratified split:** `learn.Set.StratifiedSplit` keeps the class proportions in both parts.
+- **Cross-validation:** `learn.Set.KFold` returns k stratified train/test folds.
+
+### Changed
+- `engine` and `online` split classification data stratified, so rare classes are always present in training and validation.
+- Empty CSV fields are reported as missing values, naming the column.
+- The wine-quality example holds back a test set and standardizes the features.
+
+## [0.4.1] 2026-11-25
 
 Project hygiene and robustness. No breaking API changes.
 
