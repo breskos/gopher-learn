@@ -95,7 +95,7 @@ net, err := nn.New(nn.Config{
 
 ## Benchmarks in CI
 
-Every pull request runs the benchmarks of `nn`, `drift`, `model` and `online` on the base branch and on the change and compares them with `internal/cmd/benchcheck`. The table appears in the job summary; the job fails if the geometric mean gets more than 10 % slower or a single benchmark more than 50 %. Run the same comparison locally:
+Every pull request that changes Go code benchmarks the hot paths (prediction, `Predictor`, float32 `Predictor32`, training batches and epochs, `model.Predict`, `online.Learn` and the drift detectors) on the base branch and on the change and compares them with `internal/cmd/benchcheck`. The table appears in the job summary; the job fails if the geometric mean gets more than 10 % slower or a single benchmark more than 50 %. Run the same comparison locally:
 
 ```bash
 go test -run='^$' -bench=. -count=6 ./nn/ > new.txt

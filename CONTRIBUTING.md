@@ -26,7 +26,7 @@ make test    # all tests
 make race    # tests with the race detector
 make lint    # golangci-lint
 make cover   # coverage report
-make bench   # benchmarks of the nn package
+make bench   # benchmarks of nn, drift, model and online
 ```
 
 The loaders are fuzz tested. To fuzz locally:
@@ -36,6 +36,12 @@ go test -run='^$' -fuzz='^FuzzReadCSV$' -fuzztime=30s ./learn/
 ```
 
 Quality tests train real models on synthetic data and take a few seconds; `go test -short ./...` skips them. If a change lowers the measured quality, the test fails with the value it reached.
+
+## CI
+
+- **Every pull request:** vet, tests with the race detector (short tests), all tests with coverage on Go 1.24 and the latest Go, and golangci-lint.
+- **Pull requests that change Go code** additionally run every fuzz target for 15 seconds in parallel, the tests on 32-bit with builds for ARM, RISC-V and WebAssembly, and a benchmark comparison with the base branch that fails on slowdowns. Documentation-only pull requests skip these.
+- **Nightly** on master: every fuzz target for 3 minutes.
 
 Synthetic data sets with known structure come from `internal/synth`. To write them as files, for example for benchmarks:
 

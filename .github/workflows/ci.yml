@@ -4,11 +4,40 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: "17 3 * * *" # nightly: long fuzzing on master
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run for the previous one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Decides whether Go code changed. Pull requests that only touch
+  # documentation skip fuzzing, portability checks and benchmarks.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.diff.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -qE '(\.go|go\.mod|go\.sum|\.github/workflows/.*)$'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -35,22 +64,34 @@ jobs:
             exit 1
           fi
 
+  # Every fuzz target runs in its own job, all at the same time: 15 seconds
+  # on pull requests and pushes, 3 minutes in the nightly run.
   fuzz:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: FuzzReadCSV, pkg: ./learn/ }
+          - { name: FuzzReadSVM, pkg: ./learn/ }
+          - { name: FuzzReadRecords, pkg: ./model/ }
+          - { name: FuzzPredict, pkg: ./model/ }
+          - { name: FuzzADWIN, pkg: ./drift/ }
+          - { name: FuzzNetwork32Binary, pkg: ./nn/ }
+          - { name: FuzzRead, pkg: ./persist/ }
+    name: fuzz (${{ matrix.target.name }})
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - run: go test -run='^$' -fuzz='^FuzzReadCSV$' -fuzztime=30s ./learn/
-      - run: go test -run='^$' -fuzz='^FuzzReadSVM$' -fuzztime=30s ./learn/
-      - run: go test -run='^$' -fuzz='^FuzzReadRecords$' -fuzztime=30s ./model/
-      - run: go test -run='^$' -fuzz='^FuzzPredict$' -fuzztime=30s ./model/
-      - run: go test -run='^$' -fuzz='^FuzzADWIN$' -fuzztime=30s ./drift/
-      - run: go test -run='^$' -fuzz='^FuzzNetwork32Binary$' -fuzztime=30s ./nn/
-      - run: go test -run='^$' -fuzz='^FuzzRead$' -fuzztime=60s ./persist/
+      - run: go test -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=${{ github.event_name == 'schedule' && '3m' || '15s' }} ${{ matrix.target.pkg }}
 
   portability:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,8 +107,11 @@ jobs:
           GOOS=js GOARCH=wasm go build ./...
           GOOS=wasip1 GOARCH=wasm go build ./...
 
+  # Compares the hot paths with the base branch: prediction, training,
+  # online learning and drift detection.
   bench:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,9 +124,10 @@ jobs:
         shell: bash
         run: |
           pkgs="./nn/ ./drift/ ./model/ ./online/"
+          bench='^Benchmark(Predict|Predictor|Predictor32|TrainBatch32|FitEpoch|Learn|ADWIN|PageHinkley)$'
           git worktree add ../base "origin/${{ github.base_ref }}"
-          (cd ../base && go test -run='^$' -bench=. -count=6 $pkgs > ../base.txt) || true
-          go test -run='^$' -bench=. -count=6 $pkgs > ../head.txt
+          (cd ../base && go test -run='^$' -bench="$bench" -benchtime=200ms -count=5 $pkgs > ../base.txt) || true
+          go test -run='^$' -bench="$bench" -benchtime=200ms -count=5 $pkgs > ../head.txt
           echo "### Benchmarks against ${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
           go run ./internal/cmd/benchcheck -base ../base.txt -head ../head.txt | tee -a "$GITHUB_STEP_SUMMARY"
 
