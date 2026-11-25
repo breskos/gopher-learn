@@ -23,11 +23,25 @@ type Evaluation struct {
 	// Threshold is the maximum absolute error a regression prediction may
 	// have to be counted as correct.
 	Threshold float64 `json:"threshold"`
+
+	// Labels holds the class labels in the order of the network outputs.
+	Labels []string `json:"labels,omitempty"`
+	// Regression sums for MAE, RMSE and R².
+	Count       int     `json:"count,omitempty"`
+	SumAbsError float64 `json:"sum_abs_error,omitempty"`
+	SumSqError  float64 `json:"sum_sq_error,omitempty"`
+	SumActual   float64 `json:"sum_actual,omitempty"`
+	SumActualSq float64 `json:"sum_actual_sq,omitempty"`
+
+	// scores and classes hold the network outputs of classification
+	// predictions for log loss and ROC-AUC.
+	scores  [][]float64
+	classes []int
 }
 
 // New creates an empty evaluation for the given classes.
 func New(task nn.Task, classes []string) *Evaluation {
-	e := &Evaluation{Task: task, Confusion: make(map[string]map[string]int, len(classes))}
+	e := &Evaluation{Task: task, Labels: slices.Clone(classes), Confusion: make(map[string]map[string]int, len(classes))}
 	for _, c := range classes {
 		e.Confusion[c] = make(map[string]int, len(classes))
 	}
@@ -48,11 +62,26 @@ func Evaluate(n *nn.Network, set *learn.Set, threshold float64) (*Evaluation, er
 		}
 		if set.Task == nn.Classification {
 			e.Add(s.Label, set.Labels[nn.ArgMax(out)])
+			if err := e.AddScores(out, s.Class); err != nil {
+				return nil, fmt.Errorf("evaluation: sample %d: %w", i, err)
+			}
 		} else {
 			e.AddRegression(s.Value, out[0])
 		}
 	}
 	return e, nil
+}
+
+// AddScores records the network output of a classification prediction
+// together with the index of the actual class. The scores are used for
+// LogLoss and AUC; they are not persisted.
+func (e *Evaluation) AddScores(scores []float64, actual int) error {
+	if actual < 0 || actual >= len(scores) {
+		return fmt.Errorf("evaluation: class index %d out of range for %d outputs", actual, len(scores))
+	}
+	e.scores = append(e.scores, slices.Clone(scores))
+	e.classes = append(e.classes, actual)
+	return nil
 }
 
 // Add records a classification prediction.
@@ -73,7 +102,13 @@ func (e *Evaluation) Add(actual, predicted string) {
 
 // AddRegression records a regression prediction.
 func (e *Evaluation) AddRegression(actual, predicted float64) {
-	if math.Abs(actual-predicted) < e.Threshold {
+	diff := predicted - actual
+	e.Count++
+	e.SumAbsError += math.Abs(diff)
+	e.SumSqError += diff * diff
+	e.SumActual += actual
+	e.SumActualSq += actual * actual
+	if math.Abs(diff) < e.Threshold {
 		e.Correct++
 	} else {
 		e.Wrong++

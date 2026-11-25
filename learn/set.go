@@ -179,3 +179,13 @@ func (s *Set) subset(idx []int) *Set {
 	}
 	return sub
 }
+
+// Data returns the feature vectors and target vectors of the set for nn.Fit.
+// The slices share memory with the samples.
+func (s *Set) Data() nn.Data {
+	d := nn.Data{X: make([][]float64, len(s.Samples)), Y: make([][]float64, len(s.Samples))}
+	for i, sm := range s.Samples {
+		d.X[i], d.Y[i] = sm.Vector, sm.Output
+	}
+	return d
+}
