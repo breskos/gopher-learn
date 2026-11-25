@@ -139,3 +139,22 @@ func TestScalerJSONAndValidate(t *testing.T) {
 		t.Error("unexpected method names")
 	}
 }
+
+func TestFitScalerVectors(t *testing.T) {
+	sc, err := FitScalerVectors([][]float64{{1, 5}, {3, 5}}, Standardize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := sc.Transform([]float64{3, 5}); v[0] != 1 || v[1] != 0 {
+		t.Fatalf("transform %v", v)
+	}
+	for name, in := range map[string][][]float64{
+		"none":   nil,
+		"empty":  {{}},
+		"ragged": {{1, 2}, {1}},
+	} {
+		if _, err := FitScalerVectors(in, MinMax); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}

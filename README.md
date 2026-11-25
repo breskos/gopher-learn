@@ -9,12 +9,13 @@
 
 Neural networks in pure Go, with no dependencies outside the standard library.
 
+- Models that go from raw CSV records to predictions: column detection, encoders, scaling and the network saved as one file
 - Feed-forward networks (multi-layer perceptrons) on dense matrices with biases, sigmoid, tanh, ReLU, linear and softmax activations, and mini-batch gradient descent
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning: inject samples one by one, for streams and autonomous agents
 - Encoders that turn strings and large float vectors into feature vectors
 - Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
-- Versioned JSON persistence for networks, data sets, online learners and encoders
+- Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
 
 ## Install
 
@@ -28,7 +29,8 @@ Requires Go 1.24 or newer.
 
 | Package | Purpose |
 | --- | --- |
-| [`nn`](nn) | The neural network: create, train, predict |
+| [`model`](model) | Raw records in, predictions out: preprocessing and network as one artifact |
+| [`nn`](nn) | The neural network: create, train with `nn.Fit`, predict |
 | [`learn`](learn) | Data sets and samples, CSV and LIBSVM loaders |
 | [`engine`](engine) | Batch training with learning rate decay and model selection |
 | [`online`](online) | Continuous training from a stream of samples |
@@ -37,6 +39,48 @@ Requires Go 1.24 or newer.
 | [`persist`](persist) | Save and load everything as JSON |
 
 ## Quickstart
+
+Train a model on a CSV file with a header row and predict from raw values:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/breskos/gopher-learn/model"
+	"github.com/breskos/gopher-learn/persist"
+)
+
+func main() {
+	records, err := model.LoadRecords("machines.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	m, _, err := model.Train(context.Background(), records, model.Config{
+		Target: "status",
+		Ignore: []string{"machine_id"},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := persist.SaveModel("model.json", m); err != nil {
+		log.Fatal(err)
+	}
+
+	p, err := m.Predict(model.Record{"temperature": "91.5", "vibration": "2.1", "vendor": "acme"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(p.Label, p.Scores)
+}
+```
+
+Numeric columns are scaled, text columns are encoded, and the network trains with Adam and early stopping. Use `model.Config{Task: nn.Regression}` to predict numbers. See [Models](docs/model.md).
+
+### Using the engine
 
 Train a classifier from a CSV file whose last column is the class label:
 
@@ -103,6 +147,7 @@ label, err := net.Classify([]float64{0, 1})
 
 ## Documentation
 
+- [Models](docs/model.md)
 - [Engine](docs/engine.md)
 - [Online learning](docs/online.md)
 - [Evaluation](docs/evaluation.md)

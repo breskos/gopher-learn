@@ -1,9 +1,12 @@
-// Package persist saves and loads networks, data sets, online learners and
-// encoders as versioned JSON documents.
+// Package persist saves and loads models, networks, data sets, online
+// learners, encoders and scalers as versioned JSON documents.
 //
 // Every document is wrapped in an envelope that records its kind and format
 // version, so incompatible files are rejected with a clear error instead of
 // silently producing a broken model.
+//
+// Format version 2 adds models and scalers. Files written with version 1
+// stay readable; new files are always written with the current version.
 package persist
 
 import (
@@ -16,19 +19,32 @@ import (
 
 	"github.com/breskos/gopher-learn/encoders"
 	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/model"
 	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/online"
 )
 
 // Version is the current format version.
-const Version = 1
+const Version = 2
 
 const (
 	kindNetwork = "network"
 	kindSet     = "set"
 	kindOnline  = "online"
 	kindEncoder = "encoder"
+	kindModel   = "model"
+	kindScaler  = "scaler"
 )
+
+// minVersion is the oldest format version that can be read per kind.
+var minVersion = map[string]int{
+	kindNetwork: 1,
+	kindSet:     1,
+	kindOnline:  1,
+	kindEncoder: 1,
+	kindModel:   2,
+	kindScaler:  2,
+}
 
 // ErrFormat is returned for documents of the wrong kind or an unsupported version.
 var ErrFormat = errors.New("persist: unsupported format")
@@ -55,8 +71,8 @@ func read(r io.Reader, kind string, v any) error {
 	if env.Kind != kind {
 		return fmt.Errorf("%w: got kind %q, want %q", ErrFormat, env.Kind, kind)
 	}
-	if env.Version != Version {
-		return fmt.Errorf("%w: version %d (supported: %d)", ErrFormat, env.Version, Version)
+	if lo := minVersion[kind]; env.Version < lo || env.Version > Version {
+		return fmt.Errorf("%w: %s version %d (supported: %d to %d)", ErrFormat, kind, env.Version, lo, Version)
 	}
 	return json.Unmarshal(env.Data, v)
 }
@@ -183,3 +199,49 @@ func SaveEncoder(path string, e *encoders.Encoder) error {
 
 // LoadEncoder reads an encoder from a file.
 func LoadEncoder(path string) (*encoders.Encoder, error) { return load(path, ReadEncoder) }
+
+// WriteModel writes a model with its encoders, scaler and network to w.
+func WriteModel(w io.Writer, m *model.Model) error { return write(w, kindModel, m) }
+
+// ReadModel reads and validates a model from r.
+func ReadModel(r io.Reader) (*model.Model, error) {
+	m := &model.Model{}
+	if err := read(r, kindModel, m); err != nil {
+		return nil, err
+	}
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// SaveModel writes a model to a file.
+func SaveModel(path string, m *model.Model) error {
+	return save(path, func(w io.Writer) error { return WriteModel(w, m) })
+}
+
+// LoadModel reads a model from a file.
+func LoadModel(path string) (*model.Model, error) { return load(path, ReadModel) }
+
+// WriteScaler writes a scaler to w.
+func WriteScaler(w io.Writer, sc *learn.Scaler) error { return write(w, kindScaler, sc) }
+
+// ReadScaler reads and validates a scaler from r.
+func ReadScaler(r io.Reader) (*learn.Scaler, error) {
+	sc := &learn.Scaler{}
+	if err := read(r, kindScaler, sc); err != nil {
+		return nil, err
+	}
+	if err := sc.Validate(); err != nil {
+		return nil, err
+	}
+	return sc, nil
+}
+
+// SaveScaler writes a scaler to a file.
+func SaveScaler(path string, sc *learn.Scaler) error {
+	return save(path, func(w io.Writer) error { return WriteScaler(w, sc) })
+}
+
+// LoadScaler reads a scaler from a file.
+func LoadScaler(path string) (*learn.Scaler, error) { return load(path, ReadScaler) }
