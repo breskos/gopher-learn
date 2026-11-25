@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
+	"sync"
 )
 
 var (
@@ -57,6 +59,7 @@ type Network struct {
 	Labels []string `json:"labels,omitempty"`
 
 	state *trainState
+	pool  sync.Pool // *Predictor for Predict
 }
 
 // New creates a network with randomly initialized weights.
@@ -156,17 +159,82 @@ func (n *Network) InputSize() int { return n.Layers[0].Inputs }
 func (n *Network) OutputSize() int { return n.Layers[len(n.Layers)-1].Outputs }
 
 // Predict runs a forward pass and returns a newly allocated output vector.
+// It is safe for concurrent use; the intermediate activations come from a
+// pool, so the output vector is the only allocation. Use a Predictor to
+// avoid that one too.
 func (n *Network) Predict(x []float64) ([]float64, error) {
 	if len(x) != n.InputSize() {
 		return nil, fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
 	}
+	p, _ := n.pool.Get().(*Predictor)
+	if p == nil || !p.fits(n) {
+		p = n.NewPredictor()
+	}
+	out, _ := p.Predict(x)
+	out = slices.Clone(out)
+	n.pool.Put(p)
+	return out, nil
+}
+
+// Predictor runs forward passes of a network without allocating memory.
+// It reuses its buffers, so it must not be used by several goroutines at
+// the same time; create one per goroutine. If the shape of the network
+// changes, create a new Predictor.
+type Predictor struct {
+	n    *Network
+	acts [][]float64
+}
+
+// NewPredictor returns a Predictor for the network.
+func (n *Network) NewPredictor() *Predictor {
+	p := &Predictor{n: n, acts: make([][]float64, len(n.Layers))}
+	for i, l := range n.Layers {
+		p.acts[i] = make([]float64, l.Outputs)
+	}
+	return p
+}
+
+func (p *Predictor) fits(n *Network) bool {
+	if p.n != n || len(p.acts) != len(n.Layers) {
+		return false
+	}
+	for i, l := range n.Layers {
+		if len(p.acts[i]) != l.Outputs {
+			return false
+		}
+	}
+	return true
+}
+
+// Predict runs a forward pass. The returned slice belongs to the Predictor
+// and is overwritten by the next call; copy it to keep it.
+func (p *Predictor) Predict(x []float64) ([]float64, error) {
+	n := p.n
+	if len(x) != n.InputSize() {
+		return nil, fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
+	}
+	if !p.fits(n) {
+		return nil, fmt.Errorf("%w: the network changed its shape, create a new Predictor", ErrDimension)
+	}
 	in := x
-	for _, l := range n.Layers {
-		out := make([]float64, l.Outputs)
-		l.forward(in, out)
-		in = out
+	for i, l := range n.Layers {
+		l.forward(in, p.acts[i])
+		in = p.acts[i]
 	}
 	return in, nil
+}
+
+// Classify returns the label of the output neuron with the highest
+// activation without allocating.
+func (p *Predictor) Classify(x []float64) (string, error) {
+	if len(p.n.Labels) == 0 {
+		return "", ErrNoLabels
+	}
+	out, err := p.Predict(x)
+	if err != nil {
+		return "", err
+	}
+	return p.n.Labels[ArgMax(out)], nil
 }
 
 // Classify returns the label of the output neuron with the highest activation.
@@ -174,11 +242,16 @@ func (n *Network) Classify(x []float64) (string, error) {
 	if len(n.Labels) == 0 {
 		return "", ErrNoLabels
 	}
-	out, err := n.Predict(x)
-	if err != nil {
-		return "", err
+	if len(x) != n.InputSize() {
+		return "", fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
 	}
-	return n.Labels[ArgMax(out)], nil
+	p, _ := n.pool.Get().(*Predictor)
+	if p == nil || !p.fits(n) {
+		p = n.NewPredictor()
+	}
+	label, err := p.Classify(x)
+	n.pool.Put(p)
+	return label, err
 }
 
 // Scores returns the activation of every output neuron keyed by its label.
@@ -213,13 +286,19 @@ func (n *Network) Clone() *Network {
 }
 
 func (l *Layer) forward(in, out []float64) {
-	for o := range l.Outputs {
+	in = in[:l.Inputs]
+	out = out[:l.Outputs]
+	for o := range out {
 		row := l.Weights[o*l.Inputs : (o+1)*l.Inputs]
-		sum := l.Biases[o]
-		for i, w := range row {
-			sum += w * in[i]
+		if len(row) < 8 {
+			sum := l.Biases[o]
+			for j, w := range row {
+				sum += w * in[j]
+			}
+			out[o] = sum
+		} else {
+			out[o] = l.Biases[o] + dot(row, in)
 		}
-		out[o] = sum
 	}
 	l.Activation.apply(out, out)
 }

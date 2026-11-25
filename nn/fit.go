@@ -61,6 +61,10 @@ type FitConfig struct {
 	MinDelta float64
 	// Rand shuffles the training data. Nil uses a randomly seeded source.
 	Rand *rand.Rand
+	// Workers is the number of goroutines for large layers. Zero uses
+	// GOMAXPROCS, one trains on the calling goroutine only. The result does
+	// not depend on it.
+	Workers int
 	// OnEpoch is called after every epoch. Returning false stops training.
 	OnEpoch func(EpochStats) bool
 }
@@ -136,7 +140,7 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 		if cfg.Schedule != nil {
 			lr = cfg.Schedule(epoch, cfg.LearningRate)
 		}
-		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay}
+		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay, Workers: cfg.Workers}
 		var total float64
 		order := rng.Perm(train.Len())
 		for i, idx := range order {
