@@ -16,7 +16,7 @@ import (
 	"github.com/breskos/gopher-learn/online"
 )
 
-func testModel(t *testing.T) *model.Model {
+func testModel(t testing.TB) *model.Model {
 	t.Helper()
 	rng := rand.New(rand.NewPCG(1, 1))
 	var records []model.Record

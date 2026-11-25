@@ -21,6 +21,9 @@ import (
 var (
 	// ErrDimension is returned when a vector does not match the network shape.
 	ErrDimension = errors.New("nn: dimension mismatch")
+	// ErrNonFinite is returned by training when a loss or gradient is NaN or
+	// infinite. The update is skipped, so the network stays usable.
+	ErrNonFinite = errors.New("nn: non-finite loss or gradient")
 	// ErrNoLabels is returned by Classify and Scores on a network without labels.
 	ErrNoLabels = errors.New("nn: network has no labels")
 )

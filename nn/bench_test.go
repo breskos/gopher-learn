@@ -125,3 +125,19 @@ func BenchmarkPredictor(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkPredictor32(b *testing.B) {
+	for _, s := range shapes {
+		b.Run(s.name, func(b *testing.B) {
+			p := benchNet(b, s.inputs, s.hidden, s.out, Tanh).Float32().NewPredictor()
+			x := make([]float32, s.inputs)
+			for i, v := range benchData(s.inputs, s.out, 1).X[0] {
+				x[i] = float32(v)
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				_, _ = p.Predict(x)
+			}
+		})
+	}
+}

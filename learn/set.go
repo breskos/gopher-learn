@@ -233,3 +233,51 @@ func (s *Set) Data() nn.Data {
 	}
 	return d
 }
+
+// Validate checks the consistency of a set, e.g. after decoding it: a valid
+// task, unique labels and samples with finite values, matching sizes and
+// correct targets. inputs and outputs, if positive, are the sizes the
+// samples must have; otherwise the first sample defines them.
+func (s *Set) Validate(inputs, outputs int) error {
+	if s.Task != nn.Classification && s.Task != nn.Regression {
+		return fmt.Errorf("learn: invalid task %v", s.Task)
+	}
+	seen := make(map[string]bool, len(s.Labels))
+	for _, l := range s.Labels {
+		if seen[l] {
+			return fmt.Errorf("learn: duplicate label %q", l)
+		}
+		seen[l] = true
+	}
+	if outputs <= 0 {
+		outputs = s.OutputSize()
+	}
+	if s.Task == nn.Classification && outputs != len(s.Labels) {
+		return fmt.Errorf("learn: %d labels for %d outputs", len(s.Labels), outputs)
+	}
+	for i, sm := range s.Samples {
+		if sm == nil {
+			return fmt.Errorf("learn: sample %d is nil", i)
+		}
+		if inputs <= 0 {
+			inputs = len(sm.Vector)
+		}
+		if len(sm.Vector) != inputs || inputs == 0 {
+			return fmt.Errorf("learn: sample %d has %d features, want %d", i, len(sm.Vector), inputs)
+		}
+		if len(sm.Output) != outputs {
+			return fmt.Errorf("learn: sample %d has %d target values, want %d", i, len(sm.Output), outputs)
+		}
+		for _, v := range append(append(sm.Vector[:len(sm.Vector):len(sm.Vector)], sm.Output...), sm.Value) {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return fmt.Errorf("%w: sample %d", ErrNonFinite, i)
+			}
+		}
+		if s.Task == nn.Classification {
+			if sm.Class < 0 || sm.Class >= len(s.Labels) || s.Labels[sm.Class] != sm.Label {
+				return fmt.Errorf("learn: sample %d has class %d for label %q", i, sm.Class, sm.Label)
+			}
+		}
+	}
+	return nil
+}

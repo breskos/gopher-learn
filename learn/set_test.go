@@ -2,6 +2,7 @@ package learn
 
 import (
 	"errors"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -182,4 +183,49 @@ func TestReplaceAndDropOldest(t *testing.T) {
 		t.Fatal("drop more than the size")
 	}
 	s.DropOldest(-1)
+}
+
+func TestSetValidate(t *testing.T) {
+	valid := func() *Set {
+		s := NewSet(nn.Classification)
+		_ = s.AddClass("a")
+		_ = s.AddClass("b")
+		_ = s.Add(NewClassificationSample([]float64{1, 2}, "a"))
+		_ = s.Add(NewClassificationSample([]float64{3, 4}, "b"))
+		return s
+	}
+	if err := valid().Validate(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := valid().Validate(2, 2); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]func(*Set){
+		"task":      func(s *Set) { s.Task = nn.Task(5) },
+		"duplicate": func(s *Set) { s.Labels[1] = "a" },
+		"nil":       func(s *Set) { s.Samples[0] = nil },
+		"features":  func(s *Set) { s.Samples[1].Vector = []float64{1} },
+		"empty":     func(s *Set) { s.Samples[0].Vector = nil },
+		"outputs":   func(s *Set) { s.Samples[1].Output = []float64{1} },
+		"nan":       func(s *Set) { s.Samples[0].Vector[1] = math.NaN() },
+		"class":     func(s *Set) { s.Samples[0].Class = 7 },
+		"label":     func(s *Set) { s.Samples[0].Label = "b" },
+		"labels":    func(s *Set) { s.Labels = s.Labels[:1] },
+	}
+	for name, mutate := range cases {
+		s := valid()
+		mutate(s)
+		if err := s.Validate(0, 0); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	if err := valid().Validate(3, 0); err == nil {
+		t.Error("wrong input size: expected error")
+	}
+	r := NewSet(nn.Regression)
+	_ = r.Add(NewRegressionSample([]float64{1}, math.MaxFloat64))
+	r.Samples[0].Value = math.Inf(1)
+	if err := r.Validate(0, 0); err == nil {
+		t.Error("infinite target: expected error")
+	}
 }

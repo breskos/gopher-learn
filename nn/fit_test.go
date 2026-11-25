@@ -171,6 +171,48 @@ func TestFitDiverges(t *testing.T) {
 	if h.Stop != StopDiverged {
 		t.Fatalf("stop = %q", h.Stop)
 	}
+	// the network keeps the last finite weights and stays usable
+	for _, l := range n.Layers {
+		for _, w := range append(slices.Clone(l.Weights), l.Biases...) {
+			if math.IsNaN(w) || math.IsInf(w, 0) {
+				t.Fatal("non-finite weight after divergence")
+			}
+		}
+	}
+	if out, err := n.Predict([]float64{1}); err != nil || math.IsNaN(out[0]) {
+		t.Fatalf("Predict after divergence: %v, %v", out, err)
+	}
+
+	// clipping the gradient norm keeps the same setup stable
+	n, _ = New(Config{Inputs: 1, Hidden: []int{4}, Outputs: 1, HiddenActivation: Linear, OutputActivation: Linear, Rand: seeded()})
+	h, err = Fit(context.Background(), n, data, Data{}, FitConfig{Epochs: 200, LearningRate: 0.01, Optimizer: SGD(), BatchSize: 1, ClipNorm: 1})
+	if err != nil || h.Stop != StopEpochs {
+		t.Fatalf("with clipping: %q, %v", h.Stop, err)
+	}
+	if l, _ := n.Loss(data.X, data.Y); l > 5 || math.IsNaN(l) {
+		t.Fatalf("loss %.3f with clipping", l)
+	}
+}
+
+func TestNonFiniteStep(t *testing.T) {
+	n, _ := New(Config{Inputs: 1, Outputs: 1, OutputActivation: Linear, Rand: seeded()})
+	before := slices.Clone(n.Layers[0].Weights)
+	_, err := n.TrainBatchWith([][]float64{{math.Inf(1)}}, [][]float64{{1}}, Step{Optimizer: SGD(), LearningRate: 0.1})
+	if !errors.Is(err, ErrNonFinite) {
+		t.Fatalf("want ErrNonFinite, got %v", err)
+	}
+	if !slices.Equal(before, n.Layers[0].Weights) {
+		t.Fatal("a non-finite step changed the weights")
+	}
+	// clipping scales a large gradient down to the limit
+	n.Layers[0].Weights[0], n.Layers[0].Biases[0] = 0, 0
+	if _, err := n.TrainBatchWith([][]float64{{1}}, [][]float64{{100}}, Step{Optimizer: SGD(), LearningRate: 1, ClipNorm: 2}); err != nil {
+		t.Fatal(err)
+	}
+	w, b := n.Layers[0].Weights[0], n.Layers[0].Biases[0]
+	if math.Abs(math.Hypot(w, b)-2) > 1e-9 {
+		t.Fatalf("update of norm %v, want 2", math.Hypot(w, b))
+	}
 }
 
 func TestFitErrors(t *testing.T) {

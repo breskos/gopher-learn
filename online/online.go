@@ -242,9 +242,16 @@ func (o *Online) Inject(sample *learn.Sample, force bool) error {
 	return o.hotShots(sample)
 }
 
+// hotShots trains a few quick steps on a sample. A step with a non-finite
+// gradient is skipped by the network; the remaining ones are skipped too.
 func (o *Online) hotShots(sample *learn.Sample) error {
 	for range o.Config.HotShots {
-		if _, err := o.Network.Train(sample.Vector, sample.Output, o.Config.HotShotRate); err != nil {
+		_, err := o.Network.Train(sample.Vector, sample.Output, o.Config.HotShotRate)
+		if errors.Is(err, nn.ErrNonFinite) {
+			o.logger().Warn("skipped training on a sample with a non-finite gradient")
+			return nil
+		}
+		if err != nil {
 			return fmt.Errorf("online: %w", err)
 		}
 	}

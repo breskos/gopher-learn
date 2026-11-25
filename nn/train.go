@@ -196,10 +196,15 @@ type Step struct {
 	// Workers is the number of goroutines for large layers. Zero uses
 	// GOMAXPROCS, one computes everything on the calling goroutine.
 	Workers int
+	// ClipNorm rescales the gradients so that their overall L2 norm is at
+	// most ClipNorm, which keeps single outliers from blowing up the
+	// weights. Zero disables clipping.
+	ClipNorm float64
 }
 
 // TrainBatchWith performs one update on a mini-batch with the given
-// optimizer and returns the mean loss before the update.
+// optimizer and returns the mean loss before the update. If the loss or a
+// gradient is not finite, the update is skipped and ErrNonFinite returned.
 //
 // Large layers are computed on several goroutines (see Step.Workers); the
 // result is the same for any number of workers. A network must not be
@@ -237,13 +242,32 @@ func (n *Network) TrainBatchWith(xs, targets [][]float64, step Step) (float64, e
 		n.backwardBatch(s, b, step.Workers)
 	}
 
+	// Mean gradients, optionally clipped. A non-finite loss or gradient
+	// skips the update instead of destroying the weights.
 	inv := 1 / float64(b)
+	var norm float64
+	for i := range n.Layers {
+		for _, g := range s.gradW[i] {
+			norm += g * g
+		}
+		for _, g := range s.gradB[i] {
+			norm += g * g
+		}
+	}
+	norm = math.Sqrt(norm) * inv
+	if math.IsNaN(norm) || math.IsInf(norm, 0) || math.IsNaN(loss) || math.IsInf(loss, 0) {
+		return loss * inv, ErrNonFinite
+	}
+	scale := inv
+	if step.ClipNorm > 0 && norm > step.ClipNorm {
+		scale *= step.ClipNorm / norm
+	}
 	for i, l := range n.Layers {
 		for j := range s.gradW[i] {
-			s.gradW[i][j] *= inv
+			s.gradW[i][j] *= scale
 		}
 		for j := range s.gradB[i] {
-			s.gradB[i][j] *= inv
+			s.gradB[i][j] *= scale
 		}
 		if step.WeightDecay > 0 {
 			shrink := 1 - step.LearningRate*step.WeightDecay

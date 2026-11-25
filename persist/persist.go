@@ -49,6 +49,32 @@ var minVersion = map[string]int{
 // ErrFormat is returned for documents of the wrong kind or an unsupported version.
 var ErrFormat = errors.New("persist: unsupported format")
 
+// ErrTooLarge is returned for documents larger than MaxDocumentSize.
+var ErrTooLarge = errors.New("persist: document too large")
+
+// MaxDocumentSize is the largest document the Read and Load functions
+// accept, in bytes. It protects services that load files from untrusted
+// sources from running out of memory; lower it on small devices.
+var MaxDocumentSize int64 = 1 << 30
+
+// limitedReader fails with ErrTooLarge after MaxDocumentSize bytes.
+type limitedReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (l *limitedReader) Read(p []byte) (int, error) {
+	if l.left <= 0 {
+		return 0, ErrTooLarge
+	}
+	if int64(len(p)) > l.left {
+		p = p[:l.left]
+	}
+	n, err := l.r.Read(p)
+	l.left -= int64(n)
+	return n, err
+}
+
 type envelope struct {
 	Kind    string          `json:"kind"`
 	Version int             `json:"version"`
@@ -65,7 +91,7 @@ func write(w io.Writer, kind string, v any) error {
 
 func read(r io.Reader, kind string, v any) error {
 	var env envelope
-	if err := json.NewDecoder(r).Decode(&env); err != nil {
+	if err := json.NewDecoder(&limitedReader{r: r, left: MaxDocumentSize}).Decode(&env); err != nil {
 		return err
 	}
 	if env.Kind != kind {
@@ -143,6 +169,9 @@ func ReadSet(r io.Reader) (*learn.Set, error) {
 	if err := read(r, kindSet, s); err != nil {
 		return nil, err
 	}
+	if err := s.Validate(0, 0); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -167,6 +196,15 @@ func ReadOnline(r io.Reader) (*online.Online, error) {
 		return nil, fmt.Errorf("%w: online learner without network or data", ErrFormat)
 	}
 	if err := o.Network.Validate(); err != nil {
+		return nil, err
+	}
+	if o.Config.PrequentialWindow == 0 { // written before v0.6
+		o.Config.PrequentialWindow = 500
+	}
+	if err := o.Config.Validate(); err != nil {
+		return nil, err
+	}
+	if err := o.Data.Validate(o.Network.InputSize(), o.Network.OutputSize()); err != nil {
 		return nil, err
 	}
 	return o, nil
