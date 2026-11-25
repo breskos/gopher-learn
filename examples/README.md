@@ -1,6 +1,6 @@
 # Examples for gopher-learn
 
-![The gopher-learn logo](../docs/logo/gopher.png)
+![The gopher-learn logo](https://breskos.com/wp-content/uploads/2026/11/gopher.png)
 
 ## Important
 All the data needed for the examples can be found at [gopher-learn-data](https://github.com/breskos/gopher-learn-data).

@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/breskos/gopher-learn)](https://goreportcard.com/report/github.com/breskos/gopher-learn)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-![The gopher-learn logo](docs/logo/gopher.png)
+![The gopher-learn logo](https://breskos.com/wp-content/uploads/2026/11/gopher.png)
 
 Neural networks in pure Go, with no dependencies outside the standard library.
 
