@@ -7,10 +7,11 @@
 
 ![The gopher-learn logo](https://breskos.com/wp-content/uploads/2026/11/gopher.png)
 
-Neural networks in pure Go, with no dependencies outside the standard library.
+Neural networks in pure Go, with no dependencies outside the standard library. Fast enough for services and small enough for embedded devices.
 
 - Models that go from raw CSV records to predictions: column detection, encoders, scaling and the network saved as one file
-- Feed-forward networks (multi-layer perceptrons) on dense matrices with biases, sigmoid, tanh, ReLU, linear and softmax activations, and mini-batch gradient descent
+- Feed-forward networks (multi-layer perceptrons) with sigmoid, tanh, ReLU, linear and softmax activations, SGD, momentum and Adam, dropout, layer normalization and early stopping
+- Fast: batched training on all CPU cores with bit-identical results, allocation-free inference, and float32 models with a compact binary format for small devices
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
@@ -149,6 +150,7 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
+- [Performance and embedded use](docs/performance.md)
 - [Engine](docs/engine.md)
 - [Online learning](docs/online.md)
 - [Evaluation](docs/evaluation.md)

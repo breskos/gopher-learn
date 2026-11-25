@@ -24,6 +24,9 @@ type Layer32 struct {
 	Weights         []float32 // Outputs × Inputs, row-major
 	Biases          []float32
 	Activation      Activation
+	// Norm enables layer normalization with Gain and Shift.
+	Norm        bool
+	Gain, Shift []float32
 }
 
 // Float32 returns an inference-only float32 copy of the network.
@@ -33,6 +36,9 @@ func (n *Network) Float32() *Network32 {
 		c.Layers[i] = &Layer32{
 			Inputs: l.Inputs, Outputs: l.Outputs, Activation: l.Activation,
 			Weights: toFloat32(l.Weights), Biases: toFloat32(l.Biases),
+		}
+		if l.Norm {
+			c.Layers[i].Norm, c.Layers[i].Gain, c.Layers[i].Shift = true, toFloat32(l.Gain), toFloat32(l.Shift)
 		}
 	}
 	return c
@@ -65,6 +71,8 @@ func (n *Network32) Validate() error {
 			return fmt.Errorf("nn: softmax is only allowed on the output layer (layer %d)", i)
 		case i > 0 && l.Inputs != n.Layers[i-1].Outputs:
 			return fmt.Errorf("nn: layer %d expects %d inputs, previous layer has %d outputs", i, l.Inputs, n.Layers[i-1].Outputs)
+		case l.Norm && (len(l.Gain) != l.Outputs || len(l.Shift) != l.Outputs):
+			return fmt.Errorf("nn: layer %d has invalid layer normalization", i)
 		}
 	}
 	if len(n.Labels) > 0 && len(n.Labels) != n.OutputSize() {
@@ -141,6 +149,20 @@ func (l *Layer32) forward(in, out []float32) {
 		row := l.Weights[o*l.Inputs : (o+1)*l.Inputs]
 		out[o] = l.Biases[o] + dot32(row, in)
 	}
+	if l.Norm {
+		var mean, variance float64
+		for _, v := range out {
+			mean += float64(v)
+		}
+		mean /= float64(len(out))
+		for _, v := range out {
+			variance += (float64(v) - mean) * (float64(v) - mean)
+		}
+		istd := 1 / math.Sqrt(variance/float64(len(out))+normEpsilon)
+		for j, v := range out {
+			out[j] = l.Gain[j]*float32((float64(v)-mean)*istd) + l.Shift[j]
+		}
+	}
 	l.Activation.apply32(out)
 }
 
@@ -200,6 +222,9 @@ func (a Activation) apply32(v []float32) {
 // binaryMagic starts the binary encoding of a Network32.
 var binaryMagic = [4]byte{'G', 'L', 'N', '1'}
 
+// flagNorm marks a layer with layer normalization in the binary encoding.
+const flagNorm = 1
+
 // Limits for decoding untrusted binary data.
 var (
 	maxBinaryLayers = 1 << 10
@@ -209,14 +234,15 @@ var (
 
 // MarshalBinary encodes the network in a compact little-endian format:
 // magic "GLN1", the number of layers and labels, every layer (inputs,
-// outputs, activation, weights, biases) and the labels.
+// outputs, activation, flags, weights, biases and, with normalization,
+// gains and shifts) and the labels.
 func (n *Network32) MarshalBinary() ([]byte, error) {
 	if err := n.Validate(); err != nil {
 		return nil, err
 	}
 	size := 12
 	for _, l := range n.Layers {
-		size += 12 + 4*(len(l.Weights)+len(l.Biases))
+		size += 16 + 4*(len(l.Weights)+len(l.Biases)+len(l.Gain)+len(l.Shift))
 	}
 	for _, s := range n.Labels {
 		size += 4 + len(s)
@@ -229,11 +255,15 @@ func (n *Network32) MarshalBinary() ([]byte, error) {
 		b = binary.LittleEndian.AppendUint32(b, uint32(l.Inputs))
 		b = binary.LittleEndian.AppendUint32(b, uint32(l.Outputs))
 		b = binary.LittleEndian.AppendUint32(b, uint32(l.Activation))
-		for _, w := range l.Weights {
-			b = binary.LittleEndian.AppendUint32(b, math.Float32bits(w))
+		var flags uint32
+		if l.Norm {
+			flags |= flagNorm
 		}
-		for _, w := range l.Biases {
-			b = binary.LittleEndian.AppendUint32(b, math.Float32bits(w))
+		b = binary.LittleEndian.AppendUint32(b, flags)
+		for _, v := range [][]float32{l.Weights, l.Biases, l.Gain, l.Shift} {
+			for _, w := range v {
+				b = binary.LittleEndian.AppendUint32(b, math.Float32bits(w))
+			}
 		}
 	}
 	for _, s := range n.Labels {
@@ -260,15 +290,22 @@ func (n *Network32) UnmarshalBinary(data []byte) error {
 	out := Network32{Layers: make([]*Layer32, 0, min(layers, 64))}
 	total := 0
 	for range layers {
-		in, o, act := r.uint(), r.uint(), r.uint()
-		if r.err != nil || in == 0 || o == 0 || in > maxBinaryValues/o {
-			return errors.New("nn: invalid binary layer shape")
+		in, o, act, flags := r.uint(), r.uint(), r.uint(), r.uint()
+		if r.err != nil || in == 0 || o == 0 || in > maxBinaryValues/o || flags&^flagNorm != 0 {
+			return errors.New("nn: invalid binary layer")
 		}
-		total += in*o + o
-		if total > maxBinaryValues || r.left() < 4*(in*o+o) {
+		values := in*o + o
+		if flags&flagNorm != 0 {
+			values += 2 * o
+		}
+		total += values
+		if total > maxBinaryValues || r.left() < 4*values {
 			return errors.New("nn: binary network is truncated or too large")
 		}
 		l := &Layer32{Inputs: in, Outputs: o, Activation: Activation(act), Weights: r.floats(in * o), Biases: r.floats(o)}
+		if flags&flagNorm != 0 {
+			l.Norm, l.Gain, l.Shift = true, r.floats(o), r.floats(o)
+		}
 		out.Layers = append(out.Layers, l)
 	}
 	if labels > r.left()/4 {

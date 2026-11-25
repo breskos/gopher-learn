@@ -347,9 +347,9 @@ func TestSmallMatchesBatched(t *testing.T) {
 		for i := range n.Layers {
 			gw[i] = append(slices.Clone(s.gradW[i]), s.gradB[i]...)
 		}
-		n.forwardBatch(s, len(data.X), 1)
+		n.forwardBatch(s, len(data.X), 1, nil)
 		lossBatch := n.outputDeltas(s, len(data.X), data.Y)
-		n.backwardBatch(s, len(data.X), 1)
+		n.backwardBatch(s, len(data.X), 1, false)
 		if math.Abs(lossSmall-lossBatch) > 1e-12 {
 			t.Fatalf("%v: loss %v vs %v", act, lossSmall, lossBatch)
 		}

@@ -39,6 +39,11 @@ type Config struct {
 	// HiddenActivation is used for all hidden layers. Default Sigmoid. The
 	// output layer is Softmax for classification and Linear for regression.
 	HiddenActivation nn.Activation
+	// Dropout, LayerNorm and Init regularize and initialize the network;
+	// see nn.Config.
+	Dropout   float64
+	LayerNorm bool
+	Init      nn.Init
 	// ValidationRatio is the share of records held out to select the best
 	// epoch, stratified by class. Default 0.2; negative disables validation.
 	ValidationRatio float64
@@ -138,7 +143,7 @@ func Train(ctx context.Context, records []Record, cfg Config) (*Model, *nn.Histo
 	if hidden == nil {
 		hidden = []int{32}
 	}
-	netCfg := nn.Config{Inputs: width, Hidden: hidden, HiddenActivation: cfg.HiddenActivation, Rand: rng}
+	netCfg := nn.Config{Inputs: width, Hidden: hidden, HiddenActivation: cfg.HiddenActivation, Dropout: cfg.Dropout, LayerNorm: cfg.LayerNorm, Init: cfg.Init, Rand: rng}
 	if cfg.Task == nn.Classification {
 		netCfg.Labels, netCfg.OutputActivation = labels, nn.Softmax
 	} else {

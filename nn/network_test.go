@@ -75,9 +75,9 @@ func TestGradientMatchesNumerical(t *testing.T) {
 			}
 			s := n.trainState(1)
 			copy(s.acts[0], x)
-			n.forwardBatch(s, 1, 1)
+			n.forwardBatch(s, 1, 1, nil)
 			n.outputDeltas(s, 1, [][]float64{y})
-			n.backwardBatch(s, 1, 1)
+			n.backwardBatch(s, 1, 1, false)
 			const eps = 1e-6
 			for li, l := range n.Layers {
 				for wi := range l.Weights {
@@ -194,7 +194,7 @@ func TestPredictor(t *testing.T) {
 		t.Fatalf("Classify: want ErrDimension, got %v", err)
 	}
 	// a changed shape is detected instead of reading stale buffers
-	n.Layers[1] = newLayer(16, 4, Softmax, seeded())
+	n.Layers[1] = newLayer(16, 4, Softmax, InitAuto, seeded())
 	n.Labels = append(n.Labels, "d")
 	if _, err := p.Predict(x); !errors.Is(err, ErrDimension) {
 		t.Fatalf("stale predictor: %v", err)

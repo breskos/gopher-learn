@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 )
@@ -16,20 +17,33 @@ type trainState struct {
 	deltas [][]float64
 	gradW  [][]float64
 	gradB  [][]float64
+	// for layers with dropout: the scale factor of every output (0 if dropped)
+	masks [][]float64
+	// for layers with normalization: normalized values, inverse standard
+	// deviations per sample and the gradients of gain and shift
+	zhat      [][]float64
+	istd      [][]float64
+	gradGain  [][]float64
+	gradShift [][]float64
 }
 
 func (n *Network) trainState(batch int) *trainState {
 	s := n.state
 	if s == nil || !s.fits(n) {
+		k := len(n.Layers)
 		s = &trainState{
-			acts:   make([][]float64, len(n.Layers)+1),
-			deltas: make([][]float64, len(n.Layers)),
-			gradW:  make([][]float64, len(n.Layers)),
-			gradB:  make([][]float64, len(n.Layers)),
+			acts: make([][]float64, k+1), deltas: make([][]float64, k),
+			gradW: make([][]float64, k), gradB: make([][]float64, k),
+			masks: make([][]float64, k), zhat: make([][]float64, k), istd: make([][]float64, k),
+			gradGain: make([][]float64, k), gradShift: make([][]float64, k),
 		}
 		for i, l := range n.Layers {
 			s.gradW[i] = make([]float64, len(l.Weights))
 			s.gradB[i] = make([]float64, l.Outputs)
+			if l.Norm {
+				s.gradGain[i] = make([]float64, l.Outputs)
+				s.gradShift[i] = make([]float64, l.Outputs)
+			}
 		}
 		n.state = s
 	}
@@ -39,6 +53,13 @@ func (n *Network) trainState(batch int) *trainState {
 		for i, l := range n.Layers {
 			s.acts[i+1] = make([]float64, batch*l.Outputs)
 			s.deltas[i] = make([]float64, batch*l.Outputs)
+			if l.Dropout > 0 {
+				s.masks[i] = make([]float64, batch*l.Outputs)
+			}
+			if l.Norm {
+				s.zhat[i] = make([]float64, batch*l.Outputs)
+				s.istd[i] = make([]float64, batch)
+			}
 		}
 	}
 	return s
@@ -50,7 +71,7 @@ func (s *trainState) fits(n *Network) bool {
 		return false
 	}
 	for i, l := range n.Layers {
-		if len(s.gradW[i]) != len(l.Weights) || len(s.gradB[i]) != l.Outputs {
+		if len(s.gradW[i]) != len(l.Weights) || len(s.gradB[i]) != l.Outputs || l.Norm != (s.gradGain[i] != nil) {
 			return false
 		}
 	}
@@ -134,8 +155,9 @@ func gradientRows(l *Layer, in, delta, gw, gb []float64, b, lo, hi int) {
 }
 
 // backRows computes the deltas of the previous layer for the samples lo to
-// hi: prev = Wᵀ·delta, multiplied by the derivative of its activation.
-func backRows(l *Layer, prevAct Activation, in, delta, prev []float64, lo, hi int) {
+// hi: prev = Wᵀ·delta, multiplied by the derivative of its activation. If
+// the previous layer used dropout, mask holds its scale factors.
+func backRows(l *Layer, prevAct Activation, in, delta, prev, mask []float64, lo, hi int) {
 	p := prev[lo*l.Inputs : hi*l.Inputs]
 	clear(p)
 	for o := range l.Outputs {
@@ -152,13 +174,25 @@ func backRows(l *Layer, prevAct Activation, in, delta, prev []float64, lo, hi in
 			}
 		}
 	}
+	if mask == nil {
+		for j := range p {
+			p[j] *= prevAct.derivative(in[lo*l.Inputs+j])
+		}
+		return
+	}
+	// in holds the scaled activations; the derivative needs the original ones
 	for j := range p {
-		p[j] *= prevAct.derivative(in[lo*l.Inputs+j])
+		if m := mask[lo*l.Inputs+j]; m != 0 {
+			p[j] *= prevAct.derivative(in[lo*l.Inputs+j]/m) * m
+		} else {
+			p[j] = 0
+		}
 	}
 }
 
 // forwardBatch computes the activations of b samples stored in s.acts[0].
-func (n *Network) forwardBatch(s *trainState, b, workers int) {
+// With rng set it trains: dropout is applied and its masks are kept.
+func (n *Network) forwardBatch(s *trainState, b, workers int, rng func() float64) {
 	for i, l := range n.Layers {
 		in, out := s.acts[i][:b*l.Inputs], s.acts[i+1][:b*l.Outputs]
 		if w := split(l.Outputs, workers, b*l.Inputs*l.Outputs); w > 1 {
@@ -168,7 +202,54 @@ func (n *Network) forwardBatch(s *trainState, b, workers int) {
 		}
 		for k := range b {
 			v := out[k*l.Outputs : (k+1)*l.Outputs]
+			if l.Norm {
+				s.istd[i][k] = layerNorm(v, l.Gain, l.Shift, s.zhat[i][k*l.Outputs:(k+1)*l.Outputs])
+			}
 			l.Activation.apply(v, v)
+		}
+		if l.Dropout > 0 && rng != nil {
+			// inverted dropout: kept outputs are scaled up, so predictions
+			// need no correction
+			if len(s.masks[i]) < b*l.Outputs {
+				s.masks[i] = make([]float64, s.batch*l.Outputs)
+			}
+			mask, keep := s.masks[i][:b*l.Outputs], 1/(1-l.Dropout)
+			for j := range out {
+				mask[j] = 0
+				if rng() >= l.Dropout {
+					mask[j] = keep
+				}
+				out[j] *= mask[j]
+			}
+		}
+	}
+}
+
+// normBackward turns the deltas of a normalized layer (with respect to its
+// normalized, scaled values) into deltas with respect to the raw sums and
+// accumulates the gradients of gain and shift.
+func (n *Network) normBackward(s *trainState, i, b int) {
+	l := n.Layers[i]
+	gg, gs := s.gradGain[i], s.gradShift[i]
+	clear(gg)
+	clear(gs)
+	size := float64(l.Outputs)
+	for k := range b {
+		d := s.deltas[i][k*l.Outputs : (k+1)*l.Outputs]
+		h := s.zhat[i][k*l.Outputs : (k+1)*l.Outputs]
+		var m1, m2 float64
+		for o, v := range d {
+			gg[o] += v * h[o]
+			gs[o] += v
+			d[o] = v * l.Gain[o] // gradient with respect to the normalized value
+			m1 += d[o]
+			m2 += d[o] * h[o]
+		}
+		m1 /= size
+		m2 /= size
+		istd := s.istd[i][k]
+		for o := range d {
+			d[o] = istd * (d[o] - m1 - h[o]*m2)
 		}
 	}
 }
@@ -196,6 +277,8 @@ type Step struct {
 	// Workers is the number of goroutines for large layers. Zero uses
 	// GOMAXPROCS, one computes everything on the calling goroutine.
 	Workers int
+	// Rand drives dropout. Nil uses the global random source.
+	Rand *rand.Rand
 	// ClipNorm rescales the gradients so that their overall L2 norm is at
 	// most ClipNorm, which keeps single outliers from blowing up the
 	// weights. Zero disables clipping.
@@ -237,9 +320,13 @@ func (n *Network) TrainBatchWith(xs, targets [][]float64, step Step) (float64, e
 	if n.small() {
 		loss = n.trainSmall(s, b, targets)
 	} else {
-		n.forwardBatch(s, b, step.Workers)
+		rng := rand.Float64
+		if step.Rand != nil {
+			rng = step.Rand.Float64
+		}
+		n.forwardBatch(s, b, step.Workers, rng)
 		loss = n.outputDeltas(s, b, targets)
-		n.backwardBatch(s, b, step.Workers)
+		n.backwardBatch(s, b, step.Workers, true)
 	}
 
 	// Mean gradients, optionally clipped. A non-finite loss or gradient
@@ -251,6 +338,12 @@ func (n *Network) TrainBatchWith(xs, targets [][]float64, step Step) (float64, e
 			norm += g * g
 		}
 		for _, g := range s.gradB[i] {
+			norm += g * g
+		}
+		for _, g := range s.gradGain[i] {
+			norm += g * g
+		}
+		for _, g := range s.gradShift[i] {
 			norm += g * g
 		}
 	}
@@ -277,6 +370,15 @@ func (n *Network) TrainBatchWith(xs, targets [][]float64, step Step) (float64, e
 		}
 		step.Optimizer.Step(2*i, l.Weights, s.gradW[i], step.LearningRate)
 		step.Optimizer.Step(2*i+1, l.Biases, s.gradB[i], step.LearningRate)
+		if l.Norm {
+			for j := range s.gradGain[i] {
+				s.gradGain[i][j] *= scale
+				s.gradShift[i][j] *= scale
+			}
+			// keys after those of all weights and biases
+			step.Optimizer.Step(2*len(n.Layers)+2*i, l.Gain, s.gradGain[i], step.LearningRate)
+			step.Optimizer.Step(2*len(n.Layers)+2*i+1, l.Shift, s.gradShift[i], step.LearningRate)
+		}
 	}
 	return loss * inv, nil
 }
@@ -288,7 +390,7 @@ const smallLayer = 256
 
 func (n *Network) small() bool {
 	for _, l := range n.Layers {
-		if l.Inputs*l.Outputs > smallLayer {
+		if l.Inputs*l.Outputs > smallLayer || l.Dropout > 0 || l.Norm {
 			return false
 		}
 	}
@@ -365,9 +467,13 @@ func (n *Network) outputDeltas(s *trainState, b int, targets [][]float64) float6
 }
 
 // backwardBatch computes the gradients of all layers from the output deltas.
-func (n *Network) backwardBatch(s *trainState, b, workers int) {
+// dropout tells whether the forward pass applied dropout.
+func (n *Network) backwardBatch(s *trainState, b, workers int, dropout bool) {
 	for i := len(n.Layers) - 1; i >= 0; i-- {
 		l := n.Layers[i]
+		if l.Norm {
+			n.normBackward(s, i, b)
+		}
 		in, delta := s.acts[i][:b*l.Inputs], s.deltas[i][:b*l.Outputs]
 		gw, gb := s.gradW[i], s.gradB[i]
 		work := b * l.Inputs * l.Outputs
@@ -381,10 +487,14 @@ func (n *Network) backwardBatch(s *trainState, b, workers int) {
 		}
 		prev := s.deltas[i-1][:b*l.Inputs]
 		prevAct := n.Layers[i-1].Activation
+		var mask []float64
+		if dropout && n.Layers[i-1].Dropout > 0 {
+			mask = s.masks[i-1][:b*l.Inputs]
+		}
 		if w := split(b, workers, work); w > 1 {
-			parallel(b, w, func(lo, hi int) { backRows(l, prevAct, in, delta, prev, lo, hi) })
+			parallel(b, w, func(lo, hi int) { backRows(l, prevAct, in, delta, prev, mask, lo, hi) })
 		} else {
-			backRows(l, prevAct, in, delta, prev, 0, b)
+			backRows(l, prevAct, in, delta, prev, mask, 0, b)
 		}
 	}
 }
@@ -418,7 +528,7 @@ func (n *Network) Loss(xs, targets [][]float64) (float64, error) {
 		for k, x := range xs[lo:hi] {
 			copy(s.acts[0][k*in:], x)
 		}
-		n.forwardBatch(s, hi-lo, 0)
+		n.forwardBatch(s, hi-lo, 0, nil)
 		loss += n.outputDeltas(s, hi-lo, targets[lo:hi])
 	}
 	return loss / float64(len(xs)), nil

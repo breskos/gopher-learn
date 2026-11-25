@@ -8,8 +8,8 @@ import (
 )
 
 func TestFloat32MatchesFloat64(t *testing.T) {
-	for _, act := range []Activation{Sigmoid, Tanh, ReLU, Linear} {
-		n, _ := New(Config{Inputs: 30, Hidden: []int{20, 10}, Labels: []string{"a", "b", "c"}, HiddenActivation: act, OutputActivation: Softmax, Rand: seeded()})
+	for i, act := range []Activation{Sigmoid, Tanh, ReLU, Linear} {
+		n, _ := New(Config{Inputs: 30, Hidden: []int{20, 10}, Labels: []string{"a", "b", "c"}, HiddenActivation: act, OutputActivation: Softmax, LayerNorm: i%2 == 1, Rand: seeded()})
 		c := n.Float32()
 		if err := c.Validate(); err != nil {
 			t.Fatal(err)
@@ -47,11 +47,20 @@ func TestFloat32MatchesFloat64(t *testing.T) {
 func TestFloat32Binary(t *testing.T) {
 	n, _ := New(Config{Inputs: 5, Hidden: []int{4}, Labels: []string{"yes", "no"}, OutputActivation: Softmax, Rand: seeded()})
 	c := n.Float32()
+	normed, _ := New(Config{Inputs: 5, Hidden: []int{4}, Outputs: 1, LayerNorm: true, Rand: seeded()})
+	nb, err := normed.Float32().MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nd Network32
+	if err := nd.UnmarshalBinary(nb); err != nil || !nd.Layers[0].Norm || len(nd.Layers[0].Gain) != 4 {
+		t.Fatalf("normalized network: %v", err)
+	}
 	b, err := c.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := 12 + 2*12 + 4*(20+4+8+2) + 4 + 3 + 4 + 2; len(b) != want {
+	if want := 12 + 2*16 + 4*(20+4+8+2) + 4 + 3 + 4 + 2; len(b) != want {
 		t.Fatalf("encoded %d bytes, want %d", len(b), want)
 	}
 	var d Network32
@@ -81,6 +90,7 @@ func TestFloat32Binary(t *testing.T) {
 		"no layers":  corrupt(4, 0),
 		"huge":       corrupt(15, 0x7f),
 		"activation": corrupt(20, 9),
+		"flags":      corrupt(24, 4),
 		"trailing":   append(append([]byte(nil), b...), 0),
 	} {
 		if err := new(Network32).UnmarshalBinary(data); err == nil {
@@ -120,6 +130,7 @@ func TestFloat32Errors(t *testing.T) {
 		"softmax":    func(c *Network32) { c.Layers[0].Activation = Softmax },
 		"chain":      func(c *Network32) { c.Layers[1].Inputs = 2; c.Layers[1].Weights = []float32{1, 1} },
 		"labels":     func(c *Network32) { c.Labels = []string{"a", "b"} },
+		"norm":       func(c *Network32) { c.Layers[0].Norm = true },
 	}
 	for name, mutate := range cases {
 		c := n.Float32()

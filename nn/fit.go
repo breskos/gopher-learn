@@ -142,7 +142,7 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 		if cfg.Schedule != nil {
 			lr = cfg.Schedule(epoch, cfg.LearningRate)
 		}
-		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay, Workers: cfg.Workers, ClipNorm: cfg.ClipNorm}
+		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay, Workers: cfg.Workers, ClipNorm: cfg.ClipNorm, Rand: rng}
 		var total float64
 		diverged := false
 		order := rng.Perm(train.Len())
@@ -210,6 +210,8 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 		for i, l := range bestWeights.Layers {
 			copy(n.Layers[i].Weights, l.Weights)
 			copy(n.Layers[i].Biases, l.Biases)
+			copy(n.Layers[i].Gain, l.Gain)
+			copy(n.Layers[i].Shift, l.Shift)
 		}
 	}
 	return h, nil
