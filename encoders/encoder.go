@@ -34,9 +34,20 @@ const (
 	FloatExact
 	// FloatReducer drops constant and highly correlated float dimensions.
 	FloatReducer
+	// StringHashing hashes the tokens of a string into a fixed number of
+	// dimensions (the hashing trick). It needs no vocabulary, so new words
+	// in a stream are encoded too.
+	StringHashing
+	// StringTFIDF weights the tokens of a string by how rare they are in the
+	// fitted texts (term frequency times inverse document frequency).
+	StringTFIDF
+	// FloatCategories one-hot encodes numbers that are category codes, such
+	// as 1 = red, 2 = green, per dimension.
+	FloatCategories
 )
 
-var typeNames = [...]string{"automatic", "string-dictionary", "string-split-dictionary", "string-ngrams", "float-exact", "float-reducer"}
+var typeNames = [...]string{"automatic", "string-dictionary", "string-split-dictionary", "string-ngrams", "float-exact", "float-reducer",
+	"string-hashing", "string-tfidf", "float-categories"}
 
 // String returns the name of the type.
 func (t Type) String() string {
@@ -65,7 +76,7 @@ func (t *Type) UnmarshalText(b []byte) error {
 }
 
 func (t Type) inputType() InputType {
-	if t == FloatExact || t == FloatReducer {
+	if t == FloatExact || t == FloatReducer || t == FloatCategories {
 		return Floats
 	}
 	return String
@@ -94,6 +105,12 @@ func NewModel(t Type) (Model, error) {
 		return &FloatExactModel{}, nil
 	case FloatReducer:
 		return &FloatReducerModel{}, nil
+	case StringHashing:
+		return &HashingModel{}, nil
+	case StringTFIDF:
+		return &TFIDFModel{}, nil
+	case FloatCategories:
+		return &FloatCategoriesModel{}, nil
 	}
 	return nil, fmt.Errorf("encoders: no model for type %v", t)
 }

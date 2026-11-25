@@ -1,6 +1,25 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] Unreleased
+
+Online learning done right.
+
+### Added
+- **Drift detection:** the new `drift` package with `drift.ADWIN` (adaptive windowing; `Change` tells whether the values rose or fell) and `drift.PageHinkley`, both behind the `drift.Detector` interface and serializable.
+- **Test-then-train:** `online.Online.Learn(sample)` predicts a sample, records the result, feeds the error to the drift detector, remembers the sample and trains on it. It returns an `online.Result` with the prediction, the error and whether drift was detected.
+- **Prequential evaluation:** `evaluation.Prequential` with windowed accuracy, MAE and RMSE plus a cumulative `Evaluation`; the learner keeps one in `Online.Prequential`.
+- **Bounded memory:** `Config.Memory` is `online.Window` (most recent samples), `online.Reservoir` (uniform sample of the stream) or `online.Unbounded`, with `Config.MemorySize`.
+- **Drift reaction:** on a rising error the learner forgets the samples from before the change; `Config.OnDrift` is called with an `online.DriftEvent`, at most once per `Config.DriftCooldown` samples. `Config.Drift` selects ADWIN, Page-Hinkley or none.
+- **Encoders:** `encoders.StringHashing` (hashing trick, fixed size, no vocabulary), `encoders.StringTFIDF` and `encoders.FloatCategories` (one-hot for numeric category codes), with `Config.HashDimensions`, `TFIDFMaxTerms` and `CategoriesMax`.
+- `learn.Set.Prepare`, `Replace` and `DropOldest`.
+- Quality tests on the synthetic drift streams: for classification (abrupt, gradual, recurring) drift is detected right after the change and the accuracy after an abrupt drift reaches 0.92 instead of 0.72 without detection; for regression the window memory and drift detection lower the prequential MAE on slowly drifting coefficients and after the replacement of an aging air quality sensor.
+
+### Changed
+- `online.DefaultConfig()` now bounds the memory to a window of 5,000 samples and detects drift with ADWIN. Set `Memory = online.Unbounded` and `Drift = online.NoDrift` for the previous behavior. Learners saved with earlier versions load with unbounded memory and no drift detection.
+- `Inject` respects the memory bounds.
+- `Online.Iterate` trains with `nn.Fit` and keeps the weights of the epoch with the lowest loss on the held-out split. On the synthetic streams this lowers the prequential error by up to 40 % (e.g. 0.024 → 0.015 on sensor health, 0.125 → 0.115 on recurring concepts). The new `Config.Optimizer` selects the optimizer; the default stays SGD, which did better than Adam here.
+
 ## [0.5.0] 2026-11-25
 
 Tabular essentials: train on raw CSV records, scale and split data properly, train with Adam and early stopping, measure with the usual metrics and ship the whole pipeline as one file.

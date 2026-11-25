@@ -13,6 +13,7 @@ import (
 	"github.com/breskos/gopher-learn/learn"
 	"github.com/breskos/gopher-learn/model"
 	"github.com/breskos/gopher-learn/nn"
+	"github.com/breskos/gopher-learn/online"
 )
 
 func testModel(t *testing.T) *model.Model {
@@ -131,5 +132,41 @@ func TestFormatVersions(t *testing.T) {
 		if !errors.Is(err, ErrFormat) {
 			t.Errorf("%s: want ErrFormat, got %v", name, err)
 		}
+	}
+}
+
+func TestOnlineStreamState(t *testing.T) {
+	set := learn.NewSet(nn.Classification)
+	_ = set.AddClass("a")
+	_ = set.AddClass("b")
+	o, err := online.New(set, 1, []int{3}, online.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rng := rand.New(rand.NewPCG(2, 2))
+	for range 300 {
+		x := rng.NormFloat64()
+		label := "a"
+		if x > 0 {
+			label = "b"
+		}
+		if _, err := o.Learn(learn.NewClassificationSample([]float64{x}, label)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var buf bytes.Buffer
+	if err := WriteOnline(&buf, o); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadOnline(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Learned != 300 || got.DriftADWIN == nil || got.DriftADWIN.Width != o.DriftADWIN.Width ||
+		got.Prequential.Accuracy() != o.Prequential.Accuracy() || got.Config.Memory != online.Window {
+		t.Fatalf("stream state not restored: %+v", got)
+	}
+	if _, err := got.Learn(learn.NewClassificationSample([]float64{1}, "b")); err != nil {
+		t.Fatal(err)
 	}
 }

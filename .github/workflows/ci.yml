@@ -41,6 +41,7 @@ jobs:
       - run: go test -run='^$' -fuzz='^FuzzReadSVM$' -fuzztime=30s ./learn/
       - run: go test -run='^$' -fuzz='^FuzzReadRecords$' -fuzztime=30s ./model/
       - run: go test -run='^$' -fuzz='^FuzzPredict$' -fuzztime=30s ./model/
+      - run: go test -run='^$' -fuzz='^FuzzADWIN$' -fuzztime=30s ./drift/
 
   lint:
     runs-on: ubuntu-latest
