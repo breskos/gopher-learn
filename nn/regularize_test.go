@@ -133,6 +133,9 @@ func TestDropoutGradient(t *testing.T) {
 }
 
 func TestRegularizedTraining(t *testing.T) {
+	if testing.Short() {
+		t.Skip("trains a real model")
+	}
 	rng := rand.New(rand.NewPCG(3, 3))
 	train, val := spirals(rng, 1500), spirals(rng, 500)
 	n, _ := New(Config{Inputs: 2, Hidden: []int{48, 48}, Outputs: 2, HiddenActivation: Tanh, OutputActivation: Softmax, Dropout: 0.05, LayerNorm: true, Init: GlorotNormal, Rand: rng})
