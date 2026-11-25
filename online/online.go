@@ -44,6 +44,10 @@ type Config struct {
 	// MinEpochs and MaxEpochs bound the random number of epochs per iteration.
 	MinEpochs int `json:"min_epochs"`
 	MaxEpochs int `json:"max_epochs"`
+	// Optimizer returns the optimizer for an iteration. Nil uses plain SGD,
+	// which suits the default learning rates and did better than Adam on the
+	// synthetic streams; Adam needs much lower rates (around 0.005 to 0.02).
+	Optimizer func() nn.Optimizer `json:"-"`
 	// MinLearningRate and MaxLearningRate bound the random learning rate per iteration.
 	MinLearningRate float64 `json:"min_learning_rate"`
 	MaxLearningRate float64 `json:"max_learning_rate"`
@@ -247,8 +251,9 @@ func (o *Online) hotShots(sample *learn.Sample) error {
 	return nil
 }
 
-// Iterate retrains the network on a random split of the collected data and
-// returns its score on the remaining samples: the macro F1 score for
+// Iterate retrains the network with nn.Fit on a random split of the
+// collected data, keeps the weights of the epoch with the lowest loss on the
+// remaining samples and returns its score on them: the macro F1 score for
 // classification, the ratio of correct predictions for regression.
 func (o *Online) Iterate(ctx context.Context) (float64, error) {
 	if o.Data.Len() < o.Config.MinimumDataPoints {
@@ -261,10 +266,19 @@ func (o *Online) Iterate(ctx context.Context) (float64, error) {
 	}
 	lr := o.Config.MinLearningRate + rng.Float64()*(o.Config.MaxLearningRate-o.Config.MinLearningRate)
 	epochs := o.Config.MinEpochs + rng.IntN(o.Config.MaxEpochs-o.Config.MinEpochs+1)
-	for range epochs {
-		if _, err := train.Epoch(ctx, o.Network, training, lr, o.Config.BatchSize, rng); err != nil {
-			return 0, err
-		}
+	optimizer := nn.SGD()
+	if o.Config.Optimizer != nil {
+		optimizer = o.Config.Optimizer()
+	}
+	// The held-out part selects the best epoch; its weights are kept.
+	if _, err := nn.Fit(ctx, o.Network, training.Data(), testing.Data(), nn.FitConfig{
+		Epochs:       epochs,
+		BatchSize:    max(o.Config.BatchSize, 1),
+		Optimizer:    optimizer,
+		LearningRate: lr,
+		Rand:         rng,
+	}); err != nil {
+		return 0, err
 	}
 	eval, err := evaluation.Evaluate(o.Network, testing, o.Config.RegressionThreshold)
 	if err != nil {

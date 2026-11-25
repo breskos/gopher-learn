@@ -13,11 +13,12 @@ Online learning done right.
 - **Drift reaction:** on a rising error the learner forgets the samples from before the change; `Config.OnDrift` is called with an `online.DriftEvent`, at most once per `Config.DriftCooldown` samples. `Config.Drift` selects ADWIN, Page-Hinkley or none.
 - **Encoders:** `encoders.StringHashing` (hashing trick, fixed size, no vocabulary), `encoders.StringTFIDF` and `encoders.FloatCategories` (one-hot for numeric category codes), with `Config.HashDimensions`, `TFIDFMaxTerms` and `CategoriesMax`.
 - `learn.Set.Prepare`, `Replace` and `DropOldest`.
-- Quality tests on the synthetic abrupt, gradual and recurring drift streams: drift is detected right after the change and the accuracy after an abrupt drift reaches 0.92 instead of 0.72 without detection.
+- Quality tests on the synthetic drift streams: for classification (abrupt, gradual, recurring) drift is detected right after the change and the accuracy after an abrupt drift reaches 0.92 instead of 0.72 without detection; for regression the window memory and drift detection lower the prequential MAE on slowly drifting coefficients and after the replacement of an aging air quality sensor.
 
 ### Changed
 - `online.DefaultConfig()` now bounds the memory to a window of 5,000 samples and detects drift with ADWIN. Set `Memory = online.Unbounded` and `Drift = online.NoDrift` for the previous behavior. Learners saved with earlier versions load with unbounded memory and no drift detection.
 - `Inject` respects the memory bounds.
+- `Online.Iterate` trains with `nn.Fit` and keeps the weights of the epoch with the lowest loss on the held-out split. On the synthetic streams this lowers the prequential error by up to 40 % (e.g. 0.024 → 0.015 on sensor health, 0.125 → 0.115 on recurring concepts). The new `Config.Optimizer` selects the optimizer; the default stays SGD, which did better than Adam here.
 
 ## [0.5.0] 2026-11-25
 

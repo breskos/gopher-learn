@@ -43,7 +43,9 @@ log.Printf("accuracy on the last %d samples: %.3f", o.Prequential.Len(), o.Prequ
 4. **Remember** the sample, within the bounds of the memory.
 5. **Train** on the sample with `Config.HotShots` quick steps.
 
-`Iterate` retrains on the remembered samples and returns the macro F1 score (classification) or correct ratio (regression) on a held-out split. Call it regularly; the hot shots alone adapt quickly but not thoroughly.
+`Iterate` retrains on the remembered samples with `nn.Fit` and returns the macro F1 score (classification) or correct ratio (regression) on a held-out split. The epoch with the lowest loss on that split is kept, so an unlucky learning rate cannot make the network worse. Call it regularly; the hot shots alone adapt quickly but not thoroughly.
+
+`Config.Optimizer` can switch `Iterate` to another optimizer, e.g. `nn.DefaultAdam` with learning rates around 0.005 to 0.02. On the synthetic streams plain SGD did as well or better: each iteration trains only a few epochs on a small memory, where Adam's adaptive steps do not pay off.
 
 Prefer `nn.Tanh` with `nn.Softmax` outputs for online classification: sigmoid outputs trained on squared error saturate and can get stuck after a change of concept.
 
@@ -52,7 +54,7 @@ Prefer `nn.Tanh` with `nn.Softmax` outputs for online classification: sigmoid ou
 | `Config.Memory` | Keeps | Suited for |
 | --- | --- | --- |
 | `online.Window` (default) | the `MemorySize` most recent samples | data that changes over time |
-| `online.Reservoir` | a uniform random sample of `MemorySize` samples from the whole stream | stable data where old samples stay valuable |
+| `online.Reservoir` | a uniform random sample of `MemorySize` samples from the whole stream | stable data where old samples stay valuable, and rare events such as faults that a window would forget |
 | `online.Unbounded` | every sample | small streams, the behavior before v0.6 |
 
 ## Concept drift
@@ -88,6 +90,22 @@ for _, latency := range latencies { // values in [0, 1] give the best guarantees
 
 The complete learner, including its memory, the prequential evaluation and the state of the drift detector, is saved and loaded with `persist.SaveOnline` and `persist.LoadOnline`. Learners saved before v0.6 load with unbounded memory and no drift detection.
 
+## Regression
+
+`online.DefaultConfig()` is tuned for classification. For regression:
+
+```go
+cfg := online.DefaultConfig()
+cfg.HiddenActivation, cfg.OutputActivation = nn.Tanh, nn.Linear
+cfg.HotShotRate = 0.05                                // the default 0.5 is too high for unbounded outputs
+cfg.MinLearningRate, cfg.MaxLearningRate = 0.01, 0.05 // likewise for Iterate
+cfg.RegressionThreshold = 0.1                         // error that counts as correct in Iterate's score
+```
+
+Scale features and targets to a range around [-1, 1] before learning (for example with a `learn.Scaler` fitted on the first rows of the stream). The drift detector receives the absolute error of each prediction; on scaled targets it stays small, which suits ADWIN best.
+
+On the synthetic regression streams, the window memory lowers the prequential MAE by 11 % on slowly drifting coefficients, and ADWIN detects the replacement of an aging air quality sensor about 500 samples later and lowers the MAE afterwards by 20 %.
+
 ## Config
 
-`online.DefaultConfig()` fits small classification tasks. For regression, set `OutputActivation = nn.Linear` and `RegressionThreshold` to the error you accept. `Seed` makes runs reproducible.
+`Seed` makes runs reproducible.

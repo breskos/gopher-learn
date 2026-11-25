@@ -266,3 +266,24 @@ func TestStreamConfig(t *testing.T) {
 		t.Error("names")
 	}
 }
+
+func TestIterateOptimizer(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLearningRate, cfg.MaxLearningRate = 0.005, 0.02
+	used := 0
+	cfg.Optimizer = func() nn.Optimizer { used++; return nn.DefaultAdam() }
+	o := classifier(t, cfg)
+	rng := rand.New(rand.NewPCG(4, 4))
+	for range 200 {
+		if _, err := o.Learn(point(rng, false)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	score, err := o.Iterate(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if used != 1 || score < 0.9 {
+		t.Fatalf("optimizer used %d times, score %.3f", used, score)
+	}
+}
