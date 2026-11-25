@@ -1,9 +1,11 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] Unreleased
+## [0.6.0] 2026-11-25
 
-Online learning done right.
+Online learning done right: test-then-train evaluation, concept drift detection with ADWIN and Page-Hinkley, bounded memory and encoders for text streams.
+
+No breaking API changes. `online.DefaultConfig()` now bounds the memory and detects drift; see Changed.
 
 ### Added
 - **Drift detection:** the new `drift` package with `drift.ADWIN` (adaptive windowing; `Change` tells whether the values rose or fell) and `drift.PageHinkley`, both behind the `drift.Detector` interface and serializable.
