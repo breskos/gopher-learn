@@ -1,8 +1,13 @@
 // Package online trains a network continuously from a stream of samples.
 //
-// New samples are injected with Inject, which applies a few quick training
-// steps on the sample. Iterate retrains on the collected data set and
-// evaluates the network on a random split.
+// Learn handles one sample of a stream with the test-then-train protocol: it
+// predicts the sample, records the result in a prequential evaluation and a
+// drift detector, then stores the sample and applies a few quick training
+// steps. Iterate retrains on the stored samples. The memory of stored
+// samples is bounded by a sliding window or a reservoir, and a detected
+// concept drift makes the learner forget the samples from before the change.
+//
+// Inject stores and trains on a sample without evaluating it first.
 package online
 
 import (
@@ -12,6 +17,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 
+	"github.com/breskos/gopher-learn/drift"
 	"github.com/breskos/gopher-learn/evaluation"
 	"github.com/breskos/gopher-learn/internal/train"
 	"github.com/breskos/gopher-learn/learn"
@@ -52,6 +58,26 @@ type Config struct {
 	// HiddenActivation and OutputActivation configure the network. Both default to Sigmoid.
 	HiddenActivation nn.Activation `json:"hidden_activation"`
 	OutputActivation nn.Activation `json:"output_activation"`
+	// Memory bounds the number of stored samples. Default: a sliding window.
+	Memory Memory `json:"memory"`
+	// MemorySize is the maximum number of stored samples for Window and
+	// Reservoir memory. Default 5000.
+	MemorySize int `json:"memory_size"`
+	// Drift selects the drift detector fed with the prequential errors of
+	// Learn. Default ADWIN.
+	Drift Detector `json:"drift"`
+	// DriftDelta is the confidence of ADWIN (default 0.002) or the
+	// threshold of Page-Hinkley (default 50); zero uses the default.
+	DriftDelta float64 `json:"drift_delta,omitempty"`
+	// PrequentialWindow is the number of recent results for the windowed
+	// prequential metrics. Default 500.
+	PrequentialWindow int `json:"prequential_window"`
+	// DriftCooldown is the number of samples after a detected drift during
+	// which further detections are ignored, so one change is reported once.
+	// Default 200.
+	DriftCooldown int `json:"drift_cooldown"`
+	// OnDrift is called after Learn detected a drift and the memory reacted.
+	OnDrift func(DriftEvent) `json:"-"`
 	// Seed makes training reproducible. Zero uses a random seed.
 	Seed uint64 `json:"seed"`
 	// Logger receives progress information. Nil disables logging.
@@ -72,6 +98,11 @@ func DefaultConfig() Config {
 		TargetScore:         0.7,
 		MaxInitLoops:        5,
 		RegressionThreshold: 0.05,
+		Memory:              Window,
+		MemorySize:          5000,
+		Drift:               ADWIN,
+		PrequentialWindow:   500,
+		DriftCooldown:       200,
 	}
 }
 
@@ -86,6 +117,18 @@ func (c Config) Validate() error {
 		return errors.New("online: need 0 < MinLearningRate <= MaxLearningRate")
 	case c.MinimumDataPoints < 2:
 		return errors.New("online: MinimumDataPoints must be at least 2")
+	case c.Memory < Unbounded || c.Memory > Reservoir:
+		return fmt.Errorf("online: invalid memory %v", c.Memory)
+	case c.Memory != Unbounded && c.MemorySize < c.MinimumDataPoints:
+		return errors.New("online: MemorySize must be at least MinimumDataPoints")
+	case c.Drift < NoDrift || c.Drift > PageHinkley:
+		return fmt.Errorf("online: invalid drift detector %v", c.Drift)
+	case c.DriftDelta < 0:
+		return errors.New("online: DriftDelta must not be negative")
+	case c.DriftCooldown < 0:
+		return errors.New("online: DriftCooldown must not be negative")
+	case c.PrequentialWindow < 1:
+		return errors.New("online: PrequentialWindow must be at least 1")
 	}
 	return nil
 }
@@ -97,6 +140,21 @@ type Online struct {
 	Data           *learn.Set             `json:"data"`
 	Network        *nn.Network            `json:"network"`
 	LastEvaluation *evaluation.Evaluation `json:"last_evaluation,omitempty"`
+	// Prequential holds the test-then-train results of Learn.
+	Prequential *evaluation.Prequential `json:"prequential,omitempty"`
+	// DriftADWIN or DriftPageHinkley holds the state of the drift detector,
+	// depending on Config.Drift.
+	DriftADWIN       *drift.ADWIN       `json:"drift_adwin,omitempty"`
+	DriftPageHinkley *drift.PageHinkley `json:"drift_page_hinkley,omitempty"`
+	// Seen counts the samples offered to the memory since it was last
+	// cleared; reservoir sampling needs it.
+	Seen int `json:"seen"`
+	// Learned counts the samples processed by Learn.
+	Learned int `json:"learned"`
+	// Drifts counts the detected drifts; LastDrift is the value of Learned
+	// at the last one.
+	Drifts    int `json:"drifts"`
+	LastDrift int `json:"last_drift"`
 
 	rng *rand.Rand
 }
@@ -171,9 +229,16 @@ func (o *Online) Inject(sample *learn.Sample, force bool) error {
 	if !force && o.Data.Contains(sample) {
 		return ErrSampleExists
 	}
-	if err := o.Data.Add(sample); err != nil {
+	if err := o.Data.Prepare(sample); err != nil {
 		return fmt.Errorf("online: %w", err)
 	}
+	if err := o.remember(sample); err != nil {
+		return err
+	}
+	return o.hotShots(sample)
+}
+
+func (o *Online) hotShots(sample *learn.Sample) error {
 	for range o.Config.HotShots {
 		if _, err := o.Network.Train(sample.Vector, sample.Output, o.Config.HotShotRate); err != nil {
 			return fmt.Errorf("online: %w", err)

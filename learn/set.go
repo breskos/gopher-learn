@@ -28,7 +28,7 @@ type Set struct {
 	Features []string  `json:"features,omitempty"`
 	Samples  []*Sample `json:"samples"`
 
-	index map[uint64]struct{}
+	index map[uint64]int // number of samples per feature vector key
 }
 
 // NewSet creates an empty set.
@@ -91,6 +91,53 @@ func (s *Set) OneHot(label string) ([]float64, error) {
 
 // Add validates a sample, fills in its target vector and appends it.
 func (s *Set) Add(sample *Sample) error {
+	if err := s.Prepare(sample); err != nil {
+		return err
+	}
+	s.ensureIndex()
+	s.index[sample.Key()]++
+	s.Samples = append(s.Samples, sample)
+	return nil
+}
+
+// Replace validates a sample and puts it in place of the sample at index i.
+func (s *Set) Replace(i int, sample *Sample) error {
+	if i < 0 || i >= len(s.Samples) {
+		return fmt.Errorf("learn: index %d out of range for %d samples", i, len(s.Samples))
+	}
+	if err := s.Prepare(sample); err != nil {
+		return err
+	}
+	s.ensureIndex()
+	s.unindex(s.Samples[i])
+	s.index[sample.Key()]++
+	s.Samples[i] = sample
+	return nil
+}
+
+// DropOldest removes the first n samples (all if n exceeds the size).
+func (s *Set) DropOldest(n int) {
+	n = min(max(n, 0), len(s.Samples))
+	s.ensureIndex()
+	for i := range n {
+		s.unindex(s.Samples[i])
+		s.Samples[i] = nil
+	}
+	s.Samples = s.Samples[n:]
+}
+
+func (s *Set) unindex(sample *Sample) {
+	k := sample.Key()
+	if s.index[k] <= 1 {
+		delete(s.index, k)
+	} else {
+		s.index[k]--
+	}
+}
+
+// Prepare validates a sample for the set and fills in its class index and
+// target vector without adding it.
+func (s *Set) Prepare(sample *Sample) error {
 	if sample == nil {
 		return errors.New("learn: nil sample")
 	}
@@ -121,9 +168,6 @@ func (s *Set) Add(sample *Sample) error {
 	default:
 		return fmt.Errorf("learn: invalid task %v", s.Task)
 	}
-	s.ensureIndex()
-	s.index[sample.Key()] = struct{}{}
-	s.Samples = append(s.Samples, sample)
 	return nil
 }
 
@@ -138,9 +182,9 @@ func (s *Set) ensureIndex() {
 	if s.index != nil {
 		return
 	}
-	s.index = make(map[uint64]struct{}, len(s.Samples))
+	s.index = make(map[uint64]int, len(s.Samples))
 	for _, sm := range s.Samples {
-		s.index[sm.Key()] = struct{}{}
+		s.index[sm.Key()]++
 	}
 }
 

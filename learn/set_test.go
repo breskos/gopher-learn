@@ -148,3 +148,38 @@ func TestSplit(t *testing.T) {
 		t.Fatal("expected error for ratio 1")
 	}
 }
+
+func TestReplaceAndDropOldest(t *testing.T) {
+	s := NewSet(nn.Regression)
+	a, b, c := NewRegressionSample([]float64{1}, 1), NewRegressionSample([]float64{2}, 2), NewRegressionSample([]float64{3}, 3)
+	for _, sm := range []*Sample{a, b, a, c} {
+		if err := s.Add(sm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.DropOldest(1)
+	if s.Len() != 3 || !s.Contains(a) {
+		t.Fatal("the duplicate of the dropped sample must stay known")
+	}
+	s.DropOldest(2)
+	if s.Len() != 1 || s.Contains(a) || s.Contains(b) || !s.Contains(c) {
+		t.Fatalf("after dropping: %d samples", s.Len())
+	}
+	if err := s.Replace(0, NewRegressionSample([]float64{4}, 4)); err != nil {
+		t.Fatal(err)
+	}
+	if s.Contains(c) || s.Samples[0].Output[0] != 4 {
+		t.Fatal("replaced sample still indexed")
+	}
+	if err := s.Replace(1, a); err == nil {
+		t.Error("out of range: expected error")
+	}
+	if err := s.Replace(0, NewRegressionSample([]float64{1, 2}, 1)); err == nil {
+		t.Error("wrong dimension: expected error")
+	}
+	s.DropOldest(10)
+	if s.Len() != 0 {
+		t.Fatal("drop more than the size")
+	}
+	s.DropOldest(-1)
+}

@@ -71,6 +71,9 @@ func TestADWINAbrupt(t *testing.T) {
 		if math.Abs(a.Mean()-c.after) > 0.05 || a.Width > 3000+c.delay {
 			t.Errorf("%s: window of %d values with mean %.3f after the change", c.name, a.Width, a.Mean())
 		}
+		if (a.Change > 0) != (c.after > c.before) {
+			t.Errorf("%s: change %.3f has the wrong sign", c.name, a.Change)
+		}
 		t.Logf("%s: detected after %d values", c.name, hits[0]-3000)
 	}
 }

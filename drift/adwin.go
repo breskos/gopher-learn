@@ -37,6 +37,9 @@ type ADWIN struct {
 	Total    float64    `json:"total"`
 	Variance float64    `json:"variance"` // sum of squared deviations from the mean
 	Ticks    int        `json:"ticks"`
+	// Change is the difference between the mean of the newer and the older
+	// part at the last detected drift: positive if the values rose.
+	Change float64 `json:"change"`
 }
 
 // NewADWIN returns an ADWIN detector with confidence delta (0 means 0.002).
@@ -72,11 +75,12 @@ func (a *ADWIN) Mean() float64 {
 
 // Reset forgets all values but keeps the parameters.
 func (a *ADWIN) Reset() {
-	a.Levels, a.Width, a.Total, a.Variance, a.Ticks = nil, 0, 0, 0, 0
+	a.Levels, a.Width, a.Total, a.Variance, a.Ticks, a.Change = nil, 0, 0, 0, 0, 0
 }
 
-// Add records a value and reports whether drift was detected. After a
-// detection the window holds only the values after the change.
+// Add records a value and reports whether drift was detected, in either
+// direction; Change tells whether the values rose or fell. After a detection
+// the window holds only the values after the change.
 func (a *ADWIN) Add(x float64) bool {
 	a.defaults()
 	if a.Width > 0 {
@@ -154,6 +158,7 @@ func (a *ADWIN) cut() bool {
 			m := 1/(n0-float64(a.MinWindow)+1) + 1/(n1-float64(a.MinWindow)+1)
 			eps := math.Sqrt(2*m*v*dd) + 2.0/3*dd*m
 			if math.Abs(diff) > eps {
+				a.Change = -diff
 				a.dropOldest()
 				return true
 			}
