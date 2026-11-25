@@ -12,7 +12,7 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | --- | --- | --- |
 | v0.4.0 | Rewrite for current Go, Apache-2.0 | released |
 | v0.4.x | Project hygiene | released (v0.4.1) |
-| v0.5.0 | Tabular essentials | in progress |
+| v0.5.0 | Tabular essentials | released |
 | v0.6.0 | Online learning done right | planned |
 | v0.7.0 | Performance and robustness | planned |
 | v0.8.0 | Model selection and explainability | planned |

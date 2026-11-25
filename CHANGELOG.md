@@ -1,9 +1,11 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.5.0] Unreleased
+## [0.5.0] 2026-11-25
 
-Tabular essentials. See the [roadmap](ROADMAP.md) for the remaining parts of this release.
+Tabular essentials: train on raw CSV records, scale and split data properly, train with Adam and early stopping, measure with the usual metrics and ship the whole pipeline as one file.
+
+No breaking API changes. Note that files are now written in persistence format version 2, which gopher-learn 0.4 cannot read; 0.5 reads both versions.
 
 ### Added
 - **CSV options** for `learn.Set.ReadCSV` and `LoadCSV`: `WithHeader`, `WithTarget(name)`, `WithTargetColumn(index)`, `WithIgnore(names...)`, `WithIgnoreColumns(indices...)` and `WithComma(rune)`. Without options the behavior is unchanged. Header names are stored in the new `Set.Features` field.
