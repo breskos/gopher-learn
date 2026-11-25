@@ -161,6 +161,13 @@ func (o *Online) Init(ctx context.Context) (float64, error) {
 // Inject adds a sample to the data set and trains the network on it.
 // A sample whose feature vector already exists is rejected unless force is set.
 func (o *Online) Inject(sample *learn.Sample, force bool) error {
+	if sample == nil {
+		return errors.New("online: nil sample")
+	}
+	// Check before touching the data set so a bad sample cannot corrupt it.
+	if len(sample.Vector) != o.Network.InputSize() {
+		return fmt.Errorf("online: %w: sample has %d features, network expects %d", nn.ErrDimension, len(sample.Vector), o.Network.InputSize())
+	}
 	if !force && o.Data.Contains(sample) {
 		return ErrSampleExists
 	}

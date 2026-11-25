@@ -20,7 +20,25 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
+      - run: go test -race -coverprofile=coverage.out $(go list ./... | grep -v /examples/)
+      - name: Check coverage
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $3); print $3 }')
+          echo "### Test coverage (Go ${{ matrix.go }}): ${total}%" >> "$GITHUB_STEP_SUMMARY"
+          if awk -v t="$total" -v min=90 'BEGIN { exit !(t < min) }'; then
+            echo "::error::Test coverage ${total}% is below 90%"
+            exit 1
+          fi
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go test -run='^$' -fuzz='^FuzzReadCSV$' -fuzztime=30s ./learn/
+      - run: go test -run='^$' -fuzz='^FuzzReadSVM$' -fuzztime=30s ./learn/
 
   lint:
     runs-on: ubuntu-latest

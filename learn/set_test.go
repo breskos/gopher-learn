@@ -71,6 +71,46 @@ func TestReadSVM(t *testing.T) {
 	}
 }
 
+func TestReadSVMLimits(t *testing.T) {
+	defer func(features, values int) { maxSVMFeatures, maxDenseValues = features, values }(maxSVMFeatures, maxDenseValues)
+	maxSVMFeatures, maxDenseValues = 100, 250
+
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1 101:1\n")); err == nil {
+		t.Fatal("expected error for feature index above the limit")
+	}
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1 2147483647:1\n")); err == nil {
+		t.Fatal("expected error for huge feature index")
+	}
+	// 3 rows × 100 features = 300 values > 250
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1 100:1\n2 1:1\n1 1:2\n")); err == nil {
+		t.Fatal("expected error for too many values")
+	}
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1 100:1\n2 1:1\n")); err != nil {
+		t.Fatalf("2 rows × 100 features must be accepted: %v", err)
+	}
+}
+
+func TestNonFiniteValues(t *testing.T) {
+	for _, in := range []string{"1,NaN,A\n", "1,+Inf,A\n", "1,-Inf,A\n"} {
+		err := NewSet(nn.Classification).ReadCSV(strings.NewReader(in))
+		if !errors.Is(err, ErrNonFinite) {
+			t.Errorf("ReadCSV(%q): want ErrNonFinite, got %v", in, err)
+		}
+	}
+	if err := NewSet(nn.Regression).ReadCSV(strings.NewReader("1,2,NaN\n")); !errors.Is(err, ErrNonFinite) {
+		t.Errorf("NaN target: want ErrNonFinite, got %v", err)
+	}
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1 1:NaN\n")); !errors.Is(err, ErrNonFinite) {
+		t.Errorf("ReadSVM NaN: want ErrNonFinite, got %v", err)
+	}
+}
+
+func TestEmptyFeatures(t *testing.T) {
+	if err := NewSet(nn.Classification).ReadSVM(strings.NewReader("1\n")); err == nil {
+		t.Fatal("expected error for a sample without features")
+	}
+}
+
 func TestAddUnknownClass(t *testing.T) {
 	s := NewSet(nn.Classification)
 	if err := s.Add(NewClassificationSample([]float64{1}, "X")); !errors.Is(err, ErrUnknownClass) {

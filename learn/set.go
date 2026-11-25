@@ -15,6 +15,8 @@ var (
 	ErrUnknownClass = errors.New("learn: unknown class")
 	// ErrTaskMismatch is returned for operations that do not fit the task of the set.
 	ErrTaskMismatch = errors.New("learn: operation does not match task")
+	// ErrNonFinite is returned for samples containing NaN or infinite values.
+	ErrNonFinite = errors.New("learn: non-finite value")
 )
 
 // Set is a collection of samples for one task.
@@ -89,8 +91,19 @@ func (s *Set) Add(sample *Sample) error {
 	if sample == nil {
 		return errors.New("learn: nil sample")
 	}
+	if len(sample.Vector) == 0 {
+		return errors.New("learn: sample has no features")
+	}
 	if n := s.InputSize(); n > 0 && len(sample.Vector) != n {
 		return fmt.Errorf("learn: sample has %d features, set has %d", len(sample.Vector), n)
+	}
+	for i, v := range sample.Vector {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("%w: feature %d is %v", ErrNonFinite, i, v)
+		}
+	}
+	if math.IsNaN(sample.Value) || math.IsInf(sample.Value, 0) {
+		return fmt.Errorf("%w: target value is %v", ErrNonFinite, sample.Value)
 	}
 	switch s.Task {
 	case nn.Classification:

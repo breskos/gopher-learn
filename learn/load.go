@@ -64,9 +64,22 @@ func (s *Set) LoadSVM(path string) error {
 	return s.ReadSVM(f)
 }
 
+// Limits for ReadSVM. Samples are stored as dense vectors, so a single large
+// feature index would otherwise allocate a huge vector for every row.
+// Variables instead of constants so tests can lower them.
+var (
+	// maxSVMFeatures is the highest accepted feature index.
+	maxSVMFeatures = 1 << 20
+	// maxDenseValues limits rows × features of a LIBSVM input (1 GiB of float64).
+	maxDenseValues = 1 << 27
+)
+
 // ReadSVM reads samples in sparse LIBSVM format ("<target> <index>:<value> ...").
 // Indices are 1-based; missing features are zero. The vector length is the
 // highest index found in the input (or the input size of a non-empty set).
+//
+// Because samples are stored densely, feature indices above 1,048,576 and
+// inputs with more than 134,217,728 values (rows × features) are rejected.
 func (s *Set) ReadSVM(r io.Reader) error {
 	type row struct {
 		target   string
@@ -91,6 +104,9 @@ func (s *Set) ReadSVM(r io.Reader) error {
 			if err != nil || idx < 1 {
 				return fmt.Errorf("learn: line %d: invalid index %q", line, idxStr)
 			}
+			if idx > maxSVMFeatures {
+				return fmt.Errorf("learn: line %d: feature index %d exceeds the limit of %d", line, idx, maxSVMFeatures)
+			}
 			val, err := strconv.ParseFloat(valStr, 64)
 			if err != nil {
 				return fmt.Errorf("learn: line %d: %w", line, err)
@@ -102,6 +118,9 @@ func (s *Set) ReadSVM(r io.Reader) error {
 	}
 	if err := sc.Err(); err != nil {
 		return err
+	}
+	if len(rows) > 0 && highest > maxDenseValues/len(rows) {
+		return fmt.Errorf("learn: %d rows with %d features exceed the limit of %d values", len(rows), highest, maxDenseValues)
 	}
 	for i, rw := range rows {
 		vector := make([]float64, highest)
