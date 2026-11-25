@@ -1,213 +1,130 @@
 package evaluation
 
-import (
-	"math"
-
-	neural "github.com/breskos/gopher-learn/net"
-)
-
-// GetTruePositives returns TP
-func (e *Evaluation) GetTruePositives(label string) int {
+// TruePositives returns the number of samples of class label predicted as label.
+func (e *Evaluation) TruePositives(label string) int {
 	return e.Confusion[label][label]
 }
 
-// GetFalsePositives returns FP
-func (e *Evaluation) GetFalsePositives(label string) int {
+// FalsePositives returns the number of samples of other classes predicted as label.
+func (e *Evaluation) FalsePositives(label string) int {
 	s := 0
-	for l := range e.Confusion {
-		if l != label {
-			s += e.Confusion[l][label]
+	for actual, row := range e.Confusion {
+		if actual != label {
+			s += row[label]
 		}
 	}
 	return s
 }
 
-// GetTrueNegatives returns TN
-func (e *Evaluation) GetTrueNegatives(label string) int {
+// FalseNegatives returns the number of samples of class label predicted as something else.
+func (e *Evaluation) FalseNegatives(label string) int {
 	s := 0
-	for la := range e.Confusion {
-		if la != label {
-			for l := range e.Confusion[la] {
-				if l != label {
-					s += e.Confusion[la][l]
-				}
+	for predicted, c := range e.Confusion[label] {
+		if predicted != label {
+			s += c
+		}
+	}
+	return s
+}
+
+// TrueNegatives returns the number of samples of other classes not predicted as label.
+func (e *Evaluation) TrueNegatives(label string) int {
+	s := 0
+	for actual, row := range e.Confusion {
+		if actual == label {
+			continue
+		}
+		for predicted, c := range row {
+			if predicted != label {
+				s += c
 			}
 		}
 	}
 	return s
 }
 
-// GetFalseNegatives returns FNs
-func (e *Evaluation) GetFalseNegatives(label string) int {
-	s := 0
-	for la := range e.Confusion[label] {
-		for l := range e.Confusion[la] {
-			if l != label && la == label {
-				s += e.Confusion[la][l]
-			}
-		}
+// Positives returns TP + FN.
+func (e *Evaluation) Positives(label string) int {
+	return e.TruePositives(label) + e.FalseNegatives(label)
+}
+
+// Negatives returns FP + TN.
+func (e *Evaluation) Negatives(label string) int {
+	return e.FalsePositives(label) + e.TrueNegatives(label)
+}
+
+// Accuracy returns (TP + TN) / (P + N).
+func (e *Evaluation) Accuracy(label string) float64 {
+	return ratio(e.TruePositives(label)+e.TrueNegatives(label), e.Positives(label)+e.Negatives(label))
+}
+
+// Recall returns TP / P. Also known as sensitivity or true positive rate.
+func (e *Evaluation) Recall(label string) float64 {
+	return ratio(e.TruePositives(label), e.Positives(label))
+}
+
+// Specificity returns TN / N.
+func (e *Evaluation) Specificity(label string) float64 {
+	return ratio(e.TrueNegatives(label), e.Negatives(label))
+}
+
+// Precision returns TP / (TP + FP).
+func (e *Evaluation) Precision(label string) float64 {
+	return ratio(e.TruePositives(label), e.TruePositives(label)+e.FalsePositives(label))
+}
+
+// Fallout returns FP / N. Also known as false positive rate.
+func (e *Evaluation) Fallout(label string) float64 {
+	return ratio(e.FalsePositives(label), e.Negatives(label))
+}
+
+// FalseDiscoveryRate returns FP / (FP + TP).
+func (e *Evaluation) FalseDiscoveryRate(label string) float64 {
+	return ratio(e.FalsePositives(label), e.FalsePositives(label)+e.TruePositives(label))
+}
+
+// NegativePredictiveValue returns TN / (TN + FN).
+func (e *Evaluation) NegativePredictiveValue(label string) float64 {
+	return ratio(e.TrueNegatives(label), e.TrueNegatives(label)+e.FalseNegatives(label))
+}
+
+// FMeasure returns the F1 score 2TP / (2TP + FP + FN).
+func (e *Evaluation) FMeasure(label string) float64 {
+	tp := e.TruePositives(label)
+	return ratio(2*tp, 2*tp+e.FalsePositives(label)+e.FalseNegatives(label))
+}
+
+// BalancedAccuracy returns (TP/P + TN/N) / 2.
+func (e *Evaluation) BalancedAccuracy(label string) float64 {
+	return (e.Recall(label) + e.Specificity(label)) / 2
+}
+
+// Informedness returns sensitivity + specificity - 1.
+func (e *Evaluation) Informedness(label string) float64 {
+	return e.Recall(label) + e.Specificity(label) - 1
+}
+
+// Markedness returns precision + negative predictive value - 1.
+func (e *Evaluation) Markedness(label string) float64 {
+	return e.Precision(label) + e.NegativePredictiveValue(label) - 1
+}
+
+// OverallAccuracy returns the mean accuracy over all classes.
+func (e *Evaluation) OverallAccuracy() float64 { return e.mean(e.Accuracy) }
+
+// OverallBalancedAccuracy returns the mean balanced accuracy over all classes.
+func (e *Evaluation) OverallBalancedAccuracy() float64 { return e.mean(e.BalancedAccuracy) }
+
+// OverallFMeasure returns the macro-averaged F1 score over all classes.
+func (e *Evaluation) OverallFMeasure() float64 { return e.mean(e.FMeasure) }
+
+func (e *Evaluation) mean(metric func(string) float64) float64 {
+	if len(e.Confusion) == 0 {
+		return 0
 	}
-	return s
-}
-
-// GetPositives TP + FN
-func (e *Evaluation) GetPositives(label string) int {
-	return e.GetTruePositives(label) + e.GetFalseNegatives(label)
-}
-
-// GetNegatives FP + TN
-func (e *Evaluation) GetNegatives(label string) int {
-	return e.GetFalsePositives(label) + e.GetTrueNegatives(label)
-}
-
-// GetAccuracy (TP+TN) / (P+N)
-func (e *Evaluation) GetAccuracy(label string) float64 {
-	if float64(e.GetPositives(label)+e.GetNegatives(label)) == 0.0 {
-		return 0.0
+	var sum float64
+	for c := range e.Confusion {
+		sum += metric(c)
 	}
-	return float64(e.GetTruePositives(label)+e.GetTrueNegatives(label)) / float64(e.GetPositives(label)+e.GetNegatives(label))
-}
-
-// GetRecall TP/P, TP/(TP + FN)
-func (e *Evaluation) GetRecall(label string) float64 {
-	if float64(e.GetPositives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetTruePositives(label)) / float64(e.GetPositives(label))
-}
-
-// GetSensitivity like recall
-func (e *Evaluation) GetSensitivity(label string) float64 {
-	return e.GetRecall(label)
-}
-
-// GetSpecificity TN / N, TN/(FP+TN)
-func (e *Evaluation) GetSpecificity(label string) float64 {
-	if float64(e.GetNegatives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetTrueNegatives(label)) / float64(e.GetNegatives(label))
-}
-
-// GetPrecision TP/(TP+FP)
-func (e *Evaluation) GetPrecision(label string) float64 {
-	if float64(e.GetTruePositives(label)+e.GetFalsePositives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetTruePositives(label)) / float64(e.GetTruePositives(label)+e.GetFalsePositives(label))
-}
-
-// GetFallout FP / N
-func (e *Evaluation) GetFallout(label string) float64 {
-	if float64(e.GetNegatives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetFalsePositives(label)) / float64(e.GetNegatives(label))
-}
-
-// GetFalsePositiveRate same as fallout
-func (e *Evaluation) GetFalsePositiveRate(label string) float64 {
-	return e.GetFallout(label)
-}
-
-// GetFalseDiscoveryRate FP / (FP+TP)
-func (e *Evaluation) GetFalseDiscoveryRate(label string) float64 {
-	if float64(e.GetFalsePositives(label)+e.GetTruePositives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetFalsePositives(label)) / float64(e.GetFalsePositives(label)+e.GetTruePositives(label))
-}
-
-// GetNegativePredictionValue TN/(TN+FN)
-func (e *Evaluation) GetNegativePredictionValue(label string) float64 {
-	if float64(e.GetTrueNegatives(label)+e.GetFalseNegatives(label)) == 0.0 {
-		return 0.0
-	}
-	return float64(e.GetTrueNegatives(label)) / float64(e.GetTrueNegatives(label)+e.GetFalseNegatives(label))
-}
-
-// GetFMeasure 2TP/(2TP+FP+FN)
-func (e *Evaluation) GetFMeasure(label string) float64 {
-	if float64(2*e.GetTruePositives(label)+e.GetFalsePositives(label)+e.GetFalseNegatives(label)) == 0.0 {
-		return 0.0
-	}
-	return 2.0 * float64(e.GetTruePositives(label)) / float64(2*e.GetTruePositives(label)+e.GetFalsePositives(label)+e.GetFalseNegatives(label))
-}
-
-// GetBalancedAccuracy (TP/P + TN/N) / 2
-func (e *Evaluation) GetBalancedAccuracy(label string) float64 {
-	var positives, negatives float64
-	if float64(e.GetPositives(label)) == 0.0 {
-		positives = 0.0
-	} else {
-		positives = float64(e.GetTruePositives(label)) / float64(e.GetPositives(label))
-	}
-	if float64(e.GetNegatives(label)) == 0.0 {
-		negatives = 0.0
-	} else {
-		negatives = float64(e.GetTrueNegatives(label)) / float64(e.GetNegatives(label))
-	}
-	return (positives + negatives) / 2.0
-}
-
-// GetOverallBalancedAccuracy calculates for the training evaluation
-func (e *Evaluation) GetOverallBalancedAccuracy() float64 {
-	classes := float64(len(e.Confusion))
-	sum := 0.0
-	for k := range e.Confusion {
-		sum += e.GetBalancedAccuracy(k)
-	}
-	return sum / classes
-}
-
-// GetOverallAccuracy calculates for the training evaluation
-func (e *Evaluation) GetOverallAccuracy() float64 {
-	classes := float64(len(e.Confusion))
-	sum := 0.0
-	for k := range e.Confusion {
-		sum += e.GetAccuracy(k)
-	}
-	return sum / classes
-}
-
-// GetOverallFMeasure calculates for the training evaluation
-func (e *Evaluation) GetOverallFMeasure() float64 {
-	classes := float64(len(e.Confusion))
-	sum := 0.0
-	for k := range e.Confusion {
-		sum += e.GetFMeasure(k)
-	}
-	return sum / classes
-}
-
-// GetInformedness  = Sensitivity + Specificity − 1
-func (e *Evaluation) GetInformedness(label string) float64 {
-	return e.GetSensitivity(label) + e.GetSpecificity(label) - 1.0
-}
-
-// GetMarkedness  = Precision + NegativePredictionValue − 1
-func (e *Evaluation) GetMarkedness(label string) float64 {
-	return e.GetPrecision(label) + e.GetNegativePredictionValue(label) - 1
-}
-
-// AddDistance adds distance between ideal output and output of the network
-func (e *Evaluation) AddDistance(n *neural.Network, in, ideal []float64) float64 {
-	// This function was part of the former go-neural and moved to this package.
-	out := n.Calculate(in)
-	var d float64
-	for i := range out {
-		d += math.Pow(out[i]-ideal[i], 2)
-	}
-	e.OverallDistance += d / 2.0
-	return d / 2.0
-}
-
-// GetDistance returns the distance from the evaluation
-func (e *Evaluation) GetDistance() float64 {
-	return e.OverallDistance
-}
-
-// GetCorrectRatio returns correct classified samples ratio
-func (e *Evaluation) GetCorrectRatio() float64 {
-	return float64(e.Correct) / float64(e.Wrong+e.Correct)
+	return sum / float64(len(e.Confusion))
 }

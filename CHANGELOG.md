@@ -1,6 +1,72 @@
-
 # Change Log
 All notable changes to this project will be documented in this file.
+
+## [0.4.0] Unreleased
+
+Complete rewrite for current Go. This release breaks the API; see the migration notes below.
+
+### Changed
+- License changed from GPL-3.0 to Apache-2.0.
+- Go module (`go.mod`), requires Go 1.24.
+- New package `nn` replaces `net` (which shadowed the standard library). The network is now based on dense weight matrices instead of neuron and synapse objects, has bias terms, and trains about 1.6× and predicts about 1.9× faster (60-100-2 network, allocation-free training).
+- Library code never exits the program or panics on bad input anymore; all fallible functions return errors.
+- Training is reproducible with `Config.Seed` and cancellable via `context.Context`.
+- Logging via `log/slog` (`Config.Logger`) instead of printing to stdout.
+- Reports are written to an `io.Writer`; output order is deterministic.
+- Persistence uses a versioned JSON envelope, writes files atomically and validates loaded networks. Files written by 0.3 cannot be loaded.
+- `learn.Set.Split` shuffles and splits exactly by ratio; each engine try starts with a freshly initialized network.
+
+### Added
+- Activations: tanh, ReLU, linear, softmax (with cross-entropy loss).
+- Mini-batch training (`Config.BatchSize`, `nn.Network.TrainBatch`).
+- `io.Reader` and `io.Writer` variants for loading data and persisting models.
+- GitHub Actions CI with race detector and golangci-lint, Dependabot.
+- Tests for every package, including a numerical gradient check.
+
+### Fixed
+- `FloatReducer` produced dimensions in random order (map iteration).
+- `StringDictionary` normalized strings when fitting but not when encoding.
+- `StringSplitDictionary` looked up the whole string instead of its tokens, and normalization removed the spaces it split on.
+- String normalization dropped non-ASCII letters such as umlauts.
+- N-gram vector indices depended on map iteration order.
+- `FalseNegatives` was computed incorrectly.
+- Loading a CSV left samples with too short target vectors when a new class appeared later in the file.
+- LIBSVM loader dropped the highest feature index and did not build target vectors.
+- `online.Init` stopped as soon as the score was *below* the target.
+- Persisting an online learner stored the output size as input size.
+- Metrics returned NaN on empty evaluations.
+
+### Migration from 0.3
+
+| 0.3 | 0.4 |
+| --- | --- |
+| `net.NewNetwork`, `net.BuildNetwork` | `nn.New(nn.Config{...})` |
+| `net.Classification`, `net.Regression` | `nn.Classification`, `nn.Regression` |
+| `net.Distance` and other criteria | `engine.Distance`, ... |
+| `network.Calculate(v)` | `network.Predict(v)` (returns an error) |
+| `network.CalculateWinnerLabel(v)` | `network.Classify(v)` |
+| `network.CalculateLabels(v)` | `network.Scores(v)` |
+| `learn.Learn(n, in, out, rate)` | `network.Train(in, out, rate)` |
+| `set.LoadFromCSV(path)` | `set.LoadCSV(path)` / `set.ReadCSV(r)` |
+| `set.LoadFromSVMFile(path)` | `set.LoadSVM(path)` / `set.ReadSVM(r)` |
+| `set.AddSample(s)` | `set.Add(s)` |
+| `set.ClassToLabel` | `set.Labels` |
+| `set.GenerateOutputVector(label)` | `set.OneHot(label)` (target vectors are filled in by `Add`) |
+| `learn.NewClassificationSample(v, out, label)` | `learn.NewClassificationSample(v, label)` |
+| `engine.NewEngine(usage, hidden, data)` + `SetConfig` + `Start(c)` | `engine.New(data, hidden, cfg)` + `Run(ctx, c)` |
+| `e.GetWinner()` | `e.Winner()` |
+| `online.NewOnline(usage, inputs, hidden, set)` | `online.New(set, inputs, hidden, cfg)` |
+| `o.Iterate()` | `o.Iterate(ctx)` (returns `ErrNotEnoughData` early on) |
+| `SetVerbose(true)` | `Config.Logger` |
+| `evaluation.GetX(...)` | `evaluation.X(...)` |
+| `PrintSummary(label)` etc. | `WriteSummary(w, label)` etc. |
+| `persist.ToFile` / `FromFile` | `persist.SaveNetwork` / `LoadNetwork` |
+| `persist.SetToFile`, `OnlineToFile`, `EncoderToFile` | `persist.SaveSet`, `SaveOnline`, `SaveEncoder` (and `Load*`) |
+| `encoders.NewEncoder(name)` | `encoders.New(name)` |
+| `encoders.NewInput(name, type)` | `encoders.NewInput(type)` |
+| `e.Transform(name, input)` | `e.Fit(name, input)` |
+| `e.Encode(name, encoders.Unified{...})` | `e.Encode(name, encoders.Value{...})`, `EncodeString`, `EncodeFloats` |
+| `encoders.EncoderConfig` | `encoders.Config` |
 
 ## [0.3.0] 2021-06-07
 

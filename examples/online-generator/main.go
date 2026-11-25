@@ -1,70 +1,59 @@
+// Command online-generator feeds generated data points into an online learner.
+// It needs no data files.
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"math/rand"
-	"time"
+	"log"
+	"math/rand/v2"
 
 	"github.com/breskos/gopher-learn/learn"
-	neural "github.com/breskos/gopher-learn/net"
+	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/online"
 )
 
-const (
-	classLabelY    = "Y"
-	classLabelN    = "N"
-	numberOfInputs = 7
-	hiddenNeurons  = 30
-	onlineFile     = "online_learner.json"
-)
-
-func main() {
-	rand.Seed(time.Now().UnixNano())
-	set := learn.NewSet(neural.Classification)
-	set.AddClass(classLabelY) // class on index 0
-	set.AddClass(classLabelN) // class on index 1
-	classes := []string{classLabelY, classLabelN}
-	o := online.NewOnline(neural.Classification, numberOfInputs, []int{hiddenNeurons}, set)
-	// o.SetConfig(&online.Config{}) you can also make use of the Config to fine tune the internals
-	// you can set Verbose to true to gain more insights
-	o.SetVerbose(true)
-	fmt.Printf("set: %v\n", set)
-	for i := 0; i < 2000; i++ {
-		class := rand.Intn(2)
-		classLabel := classes[class]
-		vector, target := createFeatureVector(classLabel)
-		// target could also be replaced with: set.GenerateOutputVector(classLabel)
-		sample := learn.NewClassificationSample(vector, target, classLabel)
-		// sample := learn.NewClassificationSample(vector, target, classLabel)
-		// here we inject a new sample from the generator
-		// if the data points already exists in the set (we are not forcing to override it)
-		o.Inject(sample, false)
-		if i%20 == 0 {
-			o.Iterate() // this function returns the F-Measure of the current state
-		}
-	}
-	// The functions below allow you to save the state of the Online learner to and to read them from file
-	// in order to continue with the work.
-	// persist.OnlineToFile(onlineFile, o)
-	// o, err := persist.OnlineFromFile(onlineFile)
+var centers = map[string][]float64{
+	"Y": {1.0, 3.0, 10.5, 5.0, 4.0, 3.3, 5.2},
+	"N": {1.0, 8.7, 1.3, 3.3, 4.0, 10.1, 5.1},
 }
 
-func createFeatureVector(class string) ([]float64, []float64) {
-	featuresY := []float64{1.0, 3.0, 10.5, 5.0, 4.0, 3.3, 5.2}
-	featuresN := []float64{1.0, 8.7, 1.3, 3.3, 4.0, 10.1, 5.1}
-	target := []float64{0.0, 0.0}
-	var vector []float64
-	if "Y" == class {
-		for _, v := range featuresY {
-			vector = append(vector, (v-1)+rand.Float64()*(v+1))
-
+func main() {
+	set := learn.NewSet(nn.Classification)
+	for _, label := range []string{"Y", "N"} {
+		if err := set.AddClass(label); err != nil {
+			log.Fatal(err)
 		}
-		target[0] = 1.0
-	} else {
-		for _, v := range featuresN {
-			vector = append(vector, (v-1)+rand.Float64()*(v+1))
-		}
-		target[1] = 1.0
 	}
-	return vector, target
+	o, err := online.New(set, len(centers["Y"]), []int{30}, online.DefaultConfig())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
+	for i := range 2000 {
+		label := set.Labels[rand.IntN(len(set.Labels))]
+		sample := learn.NewClassificationSample(generate(label), label)
+		if err := o.Inject(sample, false); err != nil && !errors.Is(err, online.ErrSampleExists) {
+			log.Fatal(err)
+		}
+		if i%200 == 199 {
+			score, err := o.Iterate(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("after %4d samples: F1 %.3f\n", i+1, score)
+		}
+	}
+}
+
+// generate returns a noisy point around the center of the class.
+func generate(label string) []float64 {
+	c := centers[label]
+	v := make([]float64, len(c))
+	for i, x := range c {
+		v[i] = (x - 1) + rand.Float64()*(x+1)
+	}
+	return v
 }

@@ -1,4 +1,7 @@
 # Dictionary
 
-This example shows how to use the encoder for strings to dictionaries.
-If you need more information on this encoder check: docs/encoders.md
+Encodes string states with a dictionary encoder (chosen automatically) and trains a classifier on them. No data files are needed. See [docs/encoders.md](../../docs/encoders.md) for details on encoders.
+
+```
+go run .
+```

@@ -1,31 +1,38 @@
+// Command float-reducer shows how the float reducer removes redundant dimensions.
 package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/breskos/gopher-learn/encoders"
 )
 
-const (
-	model = "floatreducer"
-)
+const dimension = "measurements"
 
 func main() {
-	e := encoders.NewEncoder("float reducer test")
-	input := encoders.NewInput(model, encoders.Floats)
-	// here we create some data points.
-	// As you can see dimension 0 and 1 are very much correlated.
-	// From these data points the float reducer strips one of the dimensions of 0 and 1.
-	// This FloatReducer is very interesting if you have large float spaces.
-	// It also erases dimensions that are not necessary because they just deliver one value or no information gain.
-	input.AddFloats([]float64{1.0, 0.0, 3.7})
-	input.AddFloats([]float64{2.0, 0.9, 0.3})
-	input.AddFloats([]float64{3.0, 1.6, 1.3})
-	input.AddFloats([]float64{4.0, 2.9, 4.2})
-	e.Scan(model, input, encoders.FloatReducer)
-	e.Transform(model, input)
-	e.Explain()
-	vector := e.Encode(model, encoders.Unified{Float: []float64{1.0, 0.0, 3.7}, Type: encoders.Floats})
-	fmt.Printf("encoded vector: %v", vector)
+	enc := encoders.New("float reducer")
+	in := encoders.NewInput(encoders.Floats)
+	// Dimension 1 rises with dimension 0 (rank correlation 1) and is dropped.
+	// Dimension 3 is constant and carries no information, so it is dropped too.
+	in.AddFloats([]float64{1.0, 0.0, 3.7, 5})
+	in.AddFloats([]float64{2.0, 0.9, 0.3, 5})
+	in.AddFloats([]float64{3.0, 1.6, 1.3, 5})
+	in.AddFloats([]float64{4.0, 2.9, 4.2, 5})
 
+	if err := enc.Scan(dimension, in, encoders.FloatReducer); err != nil {
+		log.Fatal(err)
+	}
+	if err := enc.Fit(dimension, in); err != nil {
+		log.Fatal(err)
+	}
+	if err := enc.Explain(os.Stdout); err != nil {
+		log.Fatal(err)
+	}
+	vector, err := enc.EncodeFloats(dimension, []float64{1.0, 0.0, 3.7, 5})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("encoded vector:", vector)
 }

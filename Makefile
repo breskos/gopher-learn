@@ -1,34 +1,22 @@
-test: test_neural test_persist test_learn test_engine test_evaluation
+.PHONY: all test race vet lint bench cover
 
-test_persist:
-	@( go test ./persist/ )
+all: vet test
 
-test_neural:
-	@( go test )
+test:
+	go test ./...
 
-test_learn:
-	@( go test ./learn/ )
+race:
+	go test -race ./...
 
-test_engine:
-	@( go test ./engine/ )
+vet:
+	go vet ./...
 
-test_engine:
-	@( go test ./evaluation/ )
+lint:
+	golangci-lint run
 
-goget:
-	@( \
-		go get github.com/breskos/gopher-learn; \
-		go get github.com/breskos/gopher-learn/persist; \
-		go get github.com/breskos/gopher-learn/learn; \
-		go get github.com/breskos/gopher-learn/engine; \
-		go get github.com/breskos/gopher-learn/evaluation; \
-	)
+bench:
+	go test -run=^$$ -bench=. -benchmem ./nn/
 
-gogetu:
-	@( \
-		go get github.com/breskos/gopher-learn; \
-		go get github.com/breskos/gopher-learn/persist; \
-		go get github.com/breskos/gopher-learn/learn; \
-		go get github.com/breskos/gopher-learn/engine; \
-		go get github.com/breskos/gopher-learn/evaluation; \
-	)
+cover:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
