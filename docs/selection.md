@@ -63,39 +63,6 @@ On the synthetic spirals (1,500 samples, 3 folds, 6 random candidates) the searc
 
 ```go
 imp, err := explain.Permutation(network, testSet, explain.Config{})
-for _, f := range imp {
-	fmt.Printf("%-10s %.3f ± %.3f\n", f.Feature, f.Mean, f.Std)
-}
 ```
 
-The importance of a feature is how much worse the model gets when the values of that feature are shuffled across the samples. Shuffling keeps the distribution of the feature but breaks its relation to the target. A feature the model ignores costs nothing; a feature it depends on costs a lot.
-
-- The result is sorted from most to least important. `Mean` is the average loss of quality in units of the metric (e.g. accuracy points), oriented so that larger means more important for every metric. Values around zero mean the model does not use the feature; small negative values are noise.
-- `Config.Repeats` (default 5) shuffles every feature several times; `Std` shows how stable the value is.
-- **Use data the model was not trained on.** On training data, importance also rewards features the model merely memorized.
-- Names come from `learn.Set.Features` (e.g. a CSV header), otherwise `x1`, `x2`, ….
-
-On Friedman #1, where only x1 to x5 influence the target, a trained network gives x1 to x5 importances between 0.03 and 0.08 (RMSE) and x6 to x10 importances of at most 0.0001.
-
-### For models on raw records
-
-`model.Model.Importance(records, cfg)` shuffles the raw values of a column across the records. Numeric and categorical columns are treated alike, so the importance of a categorical column covers all of its encoded features:
-
-```go
-imp, err := m.Importance(testRecords, explain.Config{})
-```
-
-### Correlated features
-
-If two features carry the same information, the model can fall back on one when the other is shuffled, so both look less important than they are. Look at correlated features together, or remove one and retrain to see the effect.
-
-### Other models
-
-`explain.Permute` computes the importance from any score function. Use it for models that are not a network on a `learn.Set`:
-
-```go
-imp, err := explain.Permute(names, rows, func(feature int, order []int) (float64, error) {
-	// evaluate the model with column `feature` taken from row order[i] for row i,
-	// or unchanged for feature -1
-}, evaluation.Accuracy, explain.Config{})
-```
+The importance of a feature is how much worse the model gets when the values of that feature are shuffled across the samples. See [Explainability](explain.md) for how to read the results, recipes (finding data leaks, removing useless features, comparing model versions), cost and limits.

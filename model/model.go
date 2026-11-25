@@ -351,27 +351,30 @@ func (m *Model) Importance(records []Record, cfg explain.Config) ([]explain.Impo
 	for j, c := range m.Columns {
 		names[j] = c.Name
 	}
-	shuffled := make([]Record, len(records))
-	for i, r := range records {
-		shuffled[i] = maps.Clone(r)
-	}
-	score := func(feature int, order []int) (float64, error) {
-		if feature >= 0 {
-			name := names[feature]
-			for i := range shuffled {
-				shuffled[i][name] = records[order[i]][name]
-			}
-			defer func() {
+	// every worker shuffles the values of its own copy of the records
+	newScore := func() explain.ScoreFunc {
+		shuffled := make([]Record, len(records))
+		for i, r := range records {
+			shuffled[i] = maps.Clone(r)
+		}
+		return func(feature int, order []int) (float64, error) {
+			if feature >= 0 {
+				name := names[feature]
 				for i := range shuffled {
-					shuffled[i][name] = records[i][name]
+					shuffled[i][name] = records[order[i]][name]
 				}
-			}()
+				defer func() {
+					for i := range shuffled {
+						shuffled[i][name] = records[i][name]
+					}
+				}()
+			}
+			e, err := m.Evaluate(shuffled, cfg.RegressionThreshold)
+			if err != nil {
+				return 0, err
+			}
+			return metric.Value(e), nil
 		}
-		e, err := m.Evaluate(shuffled, cfg.RegressionThreshold)
-		if err != nil {
-			return 0, err
-		}
-		return metric.Value(e), nil
 	}
-	return explain.Permute(names, len(records), score, metric, cfg)
+	return explain.PermuteParallel(names, len(records), newScore, metric, cfg)
 }

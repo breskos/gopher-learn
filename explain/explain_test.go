@@ -112,3 +112,21 @@ func TestPermuteErrors(t *testing.T) {
 		t.Error("evaluation error: expected error")
 	}
 }
+
+func TestPermutationWorkers(t *testing.T) {
+	test := data(300, 4)
+	n, _ := nn.New(nn.Config{Inputs: 3, Hidden: []int{4}, Labels: test.Labels, Rand: rand.New(rand.NewPCG(1, 1))})
+	one, err := Permutation(n, test, Config{Repeats: 3, Workers: 1, Rand: rand.New(rand.NewPCG(5, 5))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	many, err := Permutation(n, test, Config{Repeats: 3, Workers: 8, Rand: rand.New(rand.NewPCG(5, 5))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range one {
+		if one[i].Feature != many[i].Feature || !slices.Equal(one[i].Drops, many[i].Drops) {
+			t.Fatalf("feature %d differs: %+v vs %+v", i, one[i], many[i])
+		}
+	}
+}

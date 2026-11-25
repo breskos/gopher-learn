@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"slices"
+	"sync"
+	"sync/atomic"
 
 	"github.com/breskos/gopher-learn/evaluation"
 	"github.com/breskos/gopher-learn/learn"
@@ -52,6 +55,10 @@ type Config struct {
 	RegressionThreshold float64
 	// Rand drives the shuffles. Nil uses a randomly seeded source.
 	Rand *rand.Rand
+	// Workers is the number of features evaluated at the same time by
+	// Permutation and model.Model.Importance. Zero uses GOMAXPROCS. The
+	// result does not depend on it. Permute always works sequentially.
+	Workers int
 }
 
 func (c Config) withDefaults(task nn.Task) Config {
@@ -79,7 +86,18 @@ type ScoreFunc func(feature int, order []int) (float64, error)
 // score function, for models that are not plain networks on a learn.Set
 // (see model.Model.Importance). features names the features, rows is the
 // number of samples. The result is sorted from most to least important.
+// The features are evaluated one after another.
 func Permute(features []string, rows int, score ScoreFunc, metric evaluation.Metric, cfg Config) ([]Importance, error) {
+	cfg.Workers = 1
+	return PermuteParallel(features, rows, func() ScoreFunc { return score }, metric, cfg)
+}
+
+// PermuteParallel is Permute with several features evaluated at the same
+// time (Config.Workers). newScore is called once per worker and must return
+// a score function that can run concurrently with the others, e.g. one
+// working on its own copy of the data. The result does not depend on the
+// number of workers.
+func PermuteParallel(features []string, rows int, newScore func() ScoreFunc, metric evaluation.Metric, cfg Config) ([]Importance, error) {
 	if len(features) == 0 || rows < 2 {
 		return nil, errors.New("explain: need at least one feature and two samples")
 	}
@@ -92,38 +110,48 @@ func Permute(features []string, rows int, score ScoreFunc, metric evaluation.Met
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
-	base, err := score(-1, nil)
+	workers := cfg.Workers
+	if workers <= 0 {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	workers = min(workers, len(features))
+	scores := make([]ScoreFunc, workers)
+	for w := range scores {
+		scores[w] = newScore()
+	}
+	base, err := scores[0](-1, nil)
 	if err != nil {
 		return nil, err
 	}
+	// one seed per feature, drawn in order, so the shuffles do not depend
+	// on which worker handles a feature
+	seeds := make([]uint64, len(features))
+	for j := range seeds {
+		seeds[j] = cfg.Rand.Uint64()
+	}
 	out := make([]Importance, len(features))
-	order := make([]int, rows)
-	for j, name := range features {
-		imp := Importance{Feature: name, Index: j, Drops: make([]float64, cfg.Repeats)}
-		for r := range cfg.Repeats {
-			for i := range order {
-				order[i] = i
+	errs := make([]error, len(features))
+	var wg sync.WaitGroup
+	var next atomic.Int64
+	for w := range workers {
+		wg.Add(1)
+		go func(score ScoreFunc) {
+			defer wg.Done()
+			order := make([]int, rows)
+			for {
+				j := int(next.Add(1) - 1)
+				if j >= len(features) {
+					return
+				}
+				out[j], errs[j] = importance(features[j], j, score, order, base, metric, cfg.Repeats, seeds[j])
 			}
-			cfg.Rand.Shuffle(rows, func(a, b int) { order[a], order[b] = order[b], order[a] })
-			s, err := score(j, order)
-			if err != nil {
-				return nil, fmt.Errorf("explain: feature %q: %w", name, err)
-			}
-			drop := base - s
-			if !metric.Higher {
-				drop = s - base
-			}
-			imp.Drops[r] = drop
-			imp.Mean += drop
+		}(scores[w])
+	}
+	wg.Wait()
+	for j, err := range errs {
+		if err != nil {
+			return nil, fmt.Errorf("explain: feature %q: %w", features[j], err)
 		}
-		imp.Mean /= float64(cfg.Repeats)
-		if cfg.Repeats > 1 {
-			for _, d := range imp.Drops {
-				imp.Std += (d - imp.Mean) * (d - imp.Mean)
-			}
-			imp.Std = math.Sqrt(imp.Std / float64(cfg.Repeats-1))
-		}
-		out[j] = imp
 	}
 	slices.SortStableFunc(out, func(a, b Importance) int {
 		switch {
@@ -135,6 +163,36 @@ func Permute(features []string, rows int, score ScoreFunc, metric evaluation.Met
 		return 0
 	})
 	return out, nil
+}
+
+// importance shuffles one feature Repeats times and returns its importance.
+func importance(name string, j int, score ScoreFunc, order []int, base float64, metric evaluation.Metric, repeats int, seed uint64) (Importance, error) {
+	rng := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
+	imp := Importance{Feature: name, Index: j, Drops: make([]float64, repeats)}
+	for r := range repeats {
+		for i := range order {
+			order[i] = i
+		}
+		rng.Shuffle(len(order), func(a, b int) { order[a], order[b] = order[b], order[a] })
+		s, err := score(j, order)
+		if err != nil {
+			return imp, err
+		}
+		drop := base - s
+		if !metric.Higher {
+			drop = s - base
+		}
+		imp.Drops[r] = drop
+		imp.Mean += drop
+	}
+	imp.Mean /= float64(repeats)
+	if repeats > 1 {
+		for _, d := range imp.Drops {
+			imp.Std += (d - imp.Mean) * (d - imp.Mean)
+		}
+		imp.Std = math.Sqrt(imp.Std / float64(repeats-1))
+	}
+	return imp, nil
 }
 
 // Permutation computes the permutation importance of every input of a
@@ -155,34 +213,36 @@ func Permutation(n *nn.Network, set *learn.Set, cfg Config) ([]Importance, error
 			features[j] = set.Features[j]
 		}
 	}
-	// a private copy of the vectors whose columns are shuffled in place
 	rows := set.Len()
-	shuffled := &learn.Set{Task: set.Task, Labels: set.Labels, Samples: make([]*learn.Sample, rows)}
-	for i, s := range set.Samples {
-		c := *s
-		c.Vector = slices.Clone(s.Vector)
-		shuffled.Samples[i] = &c
-	}
-	column := make([]float64, rows)
-	score := func(feature int, order []int) (float64, error) {
-		if feature >= 0 {
-			for i, s := range set.Samples {
-				column[i] = s.Vector[feature]
-			}
-			for i, s := range shuffled.Samples {
-				s.Vector[feature] = column[order[i]]
-			}
-			defer func() {
-				for i, s := range shuffled.Samples {
-					s.Vector[feature] = column[i]
+	// every worker shuffles the columns of its own copy of the vectors
+	newScore := func() ScoreFunc {
+		shuffled := &learn.Set{Task: set.Task, Labels: set.Labels, Samples: make([]*learn.Sample, rows)}
+		for i, s := range set.Samples {
+			c := *s
+			c.Vector = slices.Clone(s.Vector)
+			shuffled.Samples[i] = &c
+		}
+		column := make([]float64, rows)
+		return func(feature int, order []int) (float64, error) {
+			if feature >= 0 {
+				for i, s := range set.Samples {
+					column[i] = s.Vector[feature]
 				}
-			}()
+				for i, s := range shuffled.Samples {
+					s.Vector[feature] = column[order[i]]
+				}
+				defer func() {
+					for i, s := range shuffled.Samples {
+						s.Vector[feature] = column[i]
+					}
+				}()
+			}
+			e, err := evaluation.Evaluate(n, shuffled, cfg.RegressionThreshold)
+			if err != nil {
+				return 0, err
+			}
+			return cfg.Metric.Value(e), nil
 		}
-		e, err := evaluation.Evaluate(n, shuffled, cfg.RegressionThreshold)
-		if err != nil {
-			return 0, err
-		}
-		return cfg.Metric.Value(e), nil
 	}
-	return Permute(features, rows, score, cfg.Metric, cfg)
+	return PermuteParallel(features, rows, newScore, cfg.Metric, cfg)
 }

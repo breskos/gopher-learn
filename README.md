@@ -51,6 +51,26 @@ label, err := n.NewPredictor().Classify(reading) // no allocation
 
 A motor fault detector with 234 parameters is a 1 KB model file; the complete device program is 1.5 to 1.9 MB and classifies 1.5 million readings per second on one core of an M1. CI builds for ARMv7, RISC-V and WebAssembly and runs the tests on 32-bit.
 
+## Explainability
+
+Which inputs does a model rely on? `explain.Permutation` shuffles one feature at a time and measures how much worse the model gets ([guide](docs/explain.md)):
+
+```go
+imp, _ := m.Importance(testRecords, explain.Config{}) // or explain.Permutation(network, testSet, …)
+for _, f := range imp {
+	fmt.Printf("%-8s %.3f ± %.3f\n", f.Feature, f.Mean, f.Std)
+}
+```
+
+```
+income   0.326 ± 0.021   ← 33 accuracy points lost without it
+x        0.243 ± 0.015
+color    0.186 ± 0.009
+noise    0.002 ± 0.003   ← unused
+```
+
+It works for every model, needs no retraining, runs on all cores and exposes data leaks: a column that is only known after the outcome stands out with a far higher importance than everything else.
+
 ## Install
 
 ```
@@ -185,7 +205,8 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
-- [Model selection and explainability](docs/selection.md)
+- [Model selection](docs/selection.md)
+- [Explainability](docs/explain.md)
 - [Performance](docs/performance.md)
 - [Embedded systems](docs/embedded.md)
 - [Engine](docs/engine.md)
