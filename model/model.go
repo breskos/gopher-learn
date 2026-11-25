@@ -16,6 +16,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/breskos/gopher-learn/encoders"
 	"github.com/breskos/gopher-learn/evaluation"
+	"github.com/breskos/gopher-learn/explain"
 	"github.com/breskos/gopher-learn/learn"
 	"github.com/breskos/gopher-learn/nn"
 )
@@ -326,4 +328,50 @@ func (m *Model) Evaluate(records []Record, threshold float64) (*evaluation.Evalu
 		}
 	}
 	return e, nil
+}
+
+// Importance computes the permutation importance of every input column on
+// records with targets, most important first: the values of one column are
+// shuffled across the records and the loss of quality is measured. Use
+// records the model was not trained on. Numeric and categorical columns are
+// treated alike, so the importance of a categorical column covers all of
+// its encoded features.
+func (m *Model) Importance(records []Record, cfg explain.Config) ([]explain.Importance, error) {
+	if len(records) < 2 {
+		return nil, errors.New("model: need at least two records")
+	}
+	metric := cfg.Metric
+	if metric.Value == nil {
+		metric = evaluation.Accuracy
+		if m.Task == nn.Regression {
+			metric = evaluation.RMSE
+		}
+	}
+	names := make([]string, len(m.Columns))
+	for j, c := range m.Columns {
+		names[j] = c.Name
+	}
+	shuffled := make([]Record, len(records))
+	for i, r := range records {
+		shuffled[i] = maps.Clone(r)
+	}
+	score := func(feature int, order []int) (float64, error) {
+		if feature >= 0 {
+			name := names[feature]
+			for i := range shuffled {
+				shuffled[i][name] = records[order[i]][name]
+			}
+			defer func() {
+				for i := range shuffled {
+					shuffled[i][name] = records[i][name]
+				}
+			}()
+		}
+		e, err := m.Evaluate(shuffled, cfg.RegressionThreshold)
+		if err != nil {
+			return 0, err
+		}
+		return metric.Value(e), nil
+	}
+	return explain.Permute(names, len(records), score, metric, cfg)
 }

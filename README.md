@@ -15,7 +15,8 @@ Neural networks in pure Go, with no dependencies outside the standard library. F
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
-- Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
+- Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy, ROC-AUC, log loss, RMSE, R² and more
+- Model selection and explainability: grid and random hyperparameter search with cross-validation, permutation feature importance
 - Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
 
 ## Performance
@@ -69,6 +70,8 @@ Requires Go 1.24 or newer.
 | [`online`](online) | Continuous training from a stream of samples |
 | [`drift`](drift) | Concept drift detection: ADWIN and Page-Hinkley |
 | [`evaluation`](evaluation) | Metrics and reports |
+| [`tune`](tune) | Hyperparameter search with cross-validation |
+| [`explain`](explain) | Permutation feature importance |
 | [`encoders`](encoders) | Feature encoding for strings and float vectors |
 | [`persist`](persist) | Save and load everything as JSON |
 
@@ -182,6 +185,7 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
+- [Model selection and explainability](docs/selection.md)
 - [Performance](docs/performance.md)
 - [Embedded systems](docs/embedded.md)
 - [Engine](docs/engine.md)

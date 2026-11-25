@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/breskos/gopher-learn/encoders"
+	"github.com/breskos/gopher-learn/explain"
 	"github.com/breskos/gopher-learn/learn"
 	"github.com/breskos/gopher-learn/nn"
 )
@@ -433,4 +434,40 @@ func FuzzReadRecords(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestImportance(t *testing.T) {
+	rng := rand.New(rand.NewPCG(11, 11))
+	records := shop(rng, 1200)
+	for _, r := range records {
+		r["noise"] = fmt.Sprint(rng.NormFloat64())
+	}
+	m, _, err := Train(context.Background(), records, Config{Target: "buys", Ignore: []string{"id"}, Hidden: []int{16}, HiddenActivation: nn.Tanh, Fit: nn.FitConfig{Epochs: 100}, Rand: rng})
+	if err != nil {
+		t.Fatal(err)
+	}
+	test := shop(rng, 600)
+	for _, r := range test {
+		r["noise"] = fmt.Sprint(rng.NormFloat64())
+	}
+	imp, err := m.Importance(test, explain.Config{Repeats: 3, Rand: rng})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range imp {
+		t.Logf("%-7s %.3f ± %.3f", f.Feature, f.Mean, f.Std)
+	}
+	if imp[len(imp)-1].Feature != "noise" || imp[len(imp)-1].Mean > 0.02 || imp[0].Mean < 0.1 {
+		t.Fatalf("importances %+v", imp)
+	}
+	if test[0]["income"] == "" {
+		t.Fatal("records were changed")
+	}
+	if _, err := m.Importance(test[:1], explain.Config{}); err == nil {
+		t.Error("one record: expected error")
+	}
+	delete(test[3], "buys")
+	if _, err := m.Importance(test, explain.Config{}); err == nil {
+		t.Error("missing target: expected error")
+	}
 }

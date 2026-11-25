@@ -1,6 +1,16 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] Unreleased
+
+Model selection and explainability. See [docs/selection.md](docs/selection.md).
+
+### Added
+- **Hyperparameter search:** the new `tune` package. `tune.Space` lists the values to try (hidden layers, activation, learning rate, batch size, dropout, weight decay, layer normalization); `Grid` returns every combination, `Random` a sample. `tune.Search` evaluates candidates with k-fold cross-validation on the same folds for all, fits the scaler on the training part of every fold, trains with `nn.Fit` and early stopping and runs trials in parallel with results independent of the number of workers. `tune.Fit` trains the chosen candidate on all data.
+- **Permutation feature importance:** the new `explain` package. `explain.Permutation` measures for a network on a data set how much worse it gets when each feature is shuffled; `model.Model.Importance` does the same for raw record columns; `explain.Permute` works with any score function.
+- `evaluation.Metric` with `Accuracy`, `MacroF1`, `BalancedAccuracy`, `MacroAUC`, `LogLoss`, `RMSE`, `MAE` and `R2`, and `evaluation.MetricByName`.
+- Quality tests: the search finds a configuration with 99.8 % on the synthetic spirals; the importance ranks the five relevant features of Friedman #1 above the five irrelevant ones.
+
 ## [0.7.0] 2026-11-25
 
 Performance and robustness: faster on large networks, as fast on tiny ones, no allocations at inference, float32 models for small devices and protection against bad data. See [docs/performance.md](docs/performance.md) and [docs/embedded.md](docs/embedded.md).
