@@ -46,3 +46,45 @@ func Example() {
 	// Output:
 	// F1 >= 0.9: true
 }
+
+// Learn from a stream whose concept changes after 2000 samples: the label
+// first depends on x1 + x2, then on x1 - x2. The drift is detected and the
+// learner forgets the samples of the old concept.
+func ExampleOnline_Learn() {
+	set := learn.NewSet(nn.Classification)
+	_ = set.AddClass("A")
+	_ = set.AddClass("B")
+	cfg := online.DefaultConfig()
+	cfg.Seed = 1
+	cfg.OnDrift = func(e online.DriftEvent) {
+		fmt.Printf("drift detected shortly after the change: %v\n", e.Sample > 2000 && e.Sample < 2100)
+	}
+	o, err := online.New(set, 2, []int{12}, cfg)
+	if err != nil {
+		panic(err)
+	}
+	rng := rand.New(rand.NewPCG(2, 2))
+	for i := range 4000 {
+		x := []float64{rng.NormFloat64(), rng.NormFloat64()}
+		score := x[0] + x[1]
+		if i >= 2000 {
+			score = x[0] - x[1]
+		}
+		label := "A"
+		if score <= 0 {
+			label = "B"
+		}
+		if _, err := o.Learn(learn.NewClassificationSample(x, label)); err != nil {
+			panic(err)
+		}
+		if (i+1)%250 == 0 {
+			if _, err := o.Iterate(context.Background()); err != nil {
+				panic(err)
+			}
+		}
+	}
+	fmt.Printf("accuracy on the last %d samples above 0.9: %v\n", o.Prequential.Len(), o.Prequential.Accuracy() > 0.9)
+	// Output:
+	// drift detected shortly after the change: true
+	// accuracy on the last 500 samples above 0.9: true
+}

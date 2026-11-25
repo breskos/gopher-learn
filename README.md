@@ -12,8 +12,8 @@ Neural networks in pure Go, with no dependencies outside the standard library.
 - Models that go from raw CSV records to predictions: column detection, encoders, scaling and the network saved as one file
 - Feed-forward networks (multi-layer perceptrons) on dense matrices with biases, sigmoid, tanh, ReLU, linear and softmax activations, and mini-batch gradient descent
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
-- Online learning: inject samples one by one, for streams and autonomous agents
-- Encoders that turn strings and large float vectors into feature vectors
+- Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
+- Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
 - Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
 - Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
 
@@ -34,6 +34,7 @@ Requires Go 1.24 or newer.
 | [`learn`](learn) | Data sets and samples, CSV and LIBSVM loaders |
 | [`engine`](engine) | Batch training with learning rate decay and model selection |
 | [`online`](online) | Continuous training from a stream of samples |
+| [`drift`](drift) | Concept drift detection: ADWIN and Page-Hinkley |
 | [`evaluation`](evaluation) | Metrics and reports |
 | [`encoders`](encoders) | Feature encoding for strings and float vectors |
 | [`persist`](persist) | Save and load everything as JSON |

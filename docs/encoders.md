@@ -35,8 +35,13 @@ Encoders are saved and loaded with `persist.SaveEncoder` and `persist.LoadEncode
 | `StringNGrams` | string | Multi-hot over the most frequent character n-grams |
 | `FloatExact` | floats | Passed through unchanged |
 | `FloatReducer` | floats | Drops constant dimensions and dimensions highly rank-correlated (Spearman) with an earlier kept one |
+| `StringHashing` | string | Hashing trick: every token adds ±1 to one of `HashDimensions` dimensions. No vocabulary, so new words in a stream are encoded too |
+| `StringTFIDF` | string | Token counts weighted by inverse document frequency, unit length; keeps the `TFIDFMaxTerms` terms occurring in most texts |
+| `FloatCategories` | floats | One-hot per dimension for numbers that are category codes (at most `CategoriesMax` per dimension) |
 
-Strings are normalized before encoding: they are lowercased and every run of characters that are not letters or digits becomes a single space. Unicode letters such as umlauts are kept. Unknown strings, tokens or n-grams encode to zeros.
+Strings are normalized before encoding: they are lowercased and every run of characters that are not letters or digits becomes a single space. Unicode letters such as umlauts are kept. Unknown strings, tokens, n-grams or category codes encode to zeros.
+
+For streams, `StringHashing` is the safest choice: its size never changes and it needs no refitting when new words appear. `Automatic` never picks the hashing, TF-IDF or category models; choose them with `Scan`.
 
 ## Automatic selection
 
