@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math"
 	"math/rand/v2"
+	"slices"
+	"sync"
 	"testing"
 )
 
@@ -71,11 +73,11 @@ func TestGradientMatchesNumerical(t *testing.T) {
 				l, _ := c.Train(x, y, 0)
 				return l
 			}
-			s := n.trainState()
-			for i := range n.Layers {
-				clear(s.gradW[i])
-			}
-			n.backprop(s, x, y)
+			s := n.trainState(1)
+			copy(s.acts[0], x)
+			n.forwardBatch(s, 1, 1, nil)
+			n.outputDeltas(s, 1, [][]float64{y})
+			n.backwardBatch(s, 1, 1, false)
 			const eps = 1e-6
 			for li, l := range n.Layers {
 				for wi := range l.Weights {
@@ -156,19 +158,73 @@ func TestCloneIsIndependent(t *testing.T) {
 	}
 }
 
-func BenchmarkTrain(b *testing.B) {
-	n, _ := New(Config{Inputs: 60, Hidden: []int{100}, Outputs: 2, Rand: seeded()})
-	x := make([]float64, 60)
-	y := []float64{1, 0}
-	for b.Loop() {
-		_, _ = n.Train(x, y, 0.1)
+func TestPredictor(t *testing.T) {
+	n, _ := New(Config{Inputs: 20, Hidden: []int{16}, Labels: []string{"a", "b", "c"}, OutputActivation: Softmax, Rand: seeded()})
+	x := make([]float64, 20)
+	for i := range x {
+		x[i] = float64(i) / 20
+	}
+	want, _ := n.Predict(x)
+	p := n.NewPredictor()
+	got, err := p.Predict(x)
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("predictor %v (%v), Predict %v", got, err, want)
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _, _ = p.Predict(x) }); allocs != 0 {
+		t.Fatalf("Predictor.Predict allocates %v times", allocs)
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _, _ = p.Classify(x) }); allocs != 0 {
+		t.Fatalf("Predictor.Classify allocates %v times", allocs)
+	}
+	if !raceEnabled {
+		if allocs := testing.AllocsPerRun(100, func() { _, _ = n.Classify(x) }); allocs != 0 {
+			t.Fatalf("Network.Classify allocates %v times", allocs)
+		}
+		if allocs := testing.AllocsPerRun(100, func() { _, _ = n.Predict(x) }); allocs > 1 {
+			t.Fatalf("Network.Predict allocates %v times", allocs)
+		}
+	}
+	if l, err := p.Classify(x); err != nil || l != n.Labels[ArgMax(want)] {
+		t.Fatalf("Classify %q, %v", l, err)
+	}
+	if _, err := p.Predict(x[:3]); !errors.Is(err, ErrDimension) {
+		t.Fatalf("want ErrDimension, got %v", err)
+	}
+	if _, err := n.Classify(x[:3]); !errors.Is(err, ErrDimension) {
+		t.Fatalf("Classify: want ErrDimension, got %v", err)
+	}
+	// a changed shape is detected instead of reading stale buffers
+	n.Layers[1] = newLayer(16, 4, Softmax, InitAuto, seeded())
+	n.Labels = append(n.Labels, "d")
+	if _, err := p.Predict(x); !errors.Is(err, ErrDimension) {
+		t.Fatalf("stale predictor: %v", err)
+	}
+	if out, err := n.Predict(x); err != nil || len(out) != 4 {
+		t.Fatalf("Predict after the change: %v, %v", out, err)
+	}
+	unlabeled, _ := New(Config{Inputs: 1, Outputs: 1, Rand: seeded()})
+	if _, err := unlabeled.NewPredictor().Classify([]float64{1}); !errors.Is(err, ErrNoLabels) {
+		t.Fatalf("want ErrNoLabels, got %v", err)
 	}
 }
 
-func BenchmarkPredict(b *testing.B) {
-	n, _ := New(Config{Inputs: 60, Hidden: []int{100}, Outputs: 2, Rand: seeded()})
-	x := make([]float64, 60)
-	for b.Loop() {
-		_, _ = n.Predict(x)
+func TestPredictConcurrently(t *testing.T) {
+	n, _ := New(Config{Inputs: 8, Hidden: []int{32}, Outputs: 3, Rand: seeded()})
+	x := []float64{1, 2, 3, 4, 5, 6, 7, 8}
+	want, _ := n.Predict(x)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 200 {
+				got, err := n.Predict(x)
+				if err != nil || !slices.Equal(got, want) {
+					t.Errorf("concurrent Predict: %v, %v", got, err)
+					return
+				}
+			}
+		}()
 	}
+	wg.Wait()
 }

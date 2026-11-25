@@ -1,6 +1,37 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] Unreleased
+
+Performance and robustness: faster on large networks, as fast on tiny ones, no allocations at inference, float32 models for small devices and protection against bad data. See [docs/performance.md](docs/performance.md) and [docs/embedded.md](docs/embedded.md).
+
+### Performance (Apple M1, against v0.6)
+| | v0.6 | v0.7 |
+| --- | ---: | ---: |
+| Predict, 60 × 100 × 2 | 5.2 µs | 2.6 µs |
+| Predict, 784 × 128 × 64 × 10 | 128 µs | 31 µs |
+| Training epoch, 784 × 128 × 64 × 10, 8 cores | 193 ms | 37 ms |
+| Training epoch, same, 1 core | 193 ms | 69 ms |
+| Training epoch, 60 × 100 × 2 | 9.4 ms | 5.0 ms |
+
+### Added
+- **Parallel mini-batch training:** large layers are computed on several goroutines with results that do not depend on the number of workers. `nn.Step.Workers` and `nn.FitConfig.Workers` (zero: GOMAXPROCS, one: sequential).
+- **Allocation-free inference:** `Network.NewPredictor` returns a `Predictor` whose `Predict` and `Classify` do not allocate. `Network.Predict` allocates only the result, `Network.Classify` nothing.
+- **float32 models:** `Network.Float32` returns an inference-only `nn.Network32` with half the memory and its own allocation-free `Predictor32`. `MarshalBinary`/`UnmarshalBinary` use a compact binary format that checks every size before allocating.
+- **Regularization:** `nn.Config.Dropout` (inverted dropout on hidden layers) and `nn.Config.LayerNorm` (layer normalization with learned gain and shift); `nn.Config.Init` selects `GlorotUniform`, `GlorotNormal`, `HeUniform` or `HeNormal`. `model.Config` passes them through.
+- **Gradient clipping:** `nn.Step.ClipNorm` and `nn.FitConfig.ClipNorm`.
+- `nn.ErrNonFinite`: a training step with a NaN or infinite loss or gradient is skipped instead of destroying the weights; `nn.Fit` stops with `StopDiverged` and keeps the last finite weights.
+- `learn.Set.Validate`; `persist.MaxDocumentSize` and `persist.ErrTooLarge` limit the size of loaded documents.
+- Benchmarks for `nn`, `model`, `online` and `drift`; CI compares them with the base branch on every pull request (`internal/cmd/benchcheck`) and fails on regressions. CI also tests on 32-bit and builds for ARM, RISC-V and WebAssembly.
+- Fuzz tests for every reader in `persist` and for the float32 binary format.
+- `examples/embedded`: train a motor fault detector on a computer and run it as a 1 KB float32 model on a device.
+
+### Changed
+- `persist.ReadSet` and `ReadOnline` validate what they load (sizes, finite values, classes, configuration), so corrupt files fail on load instead of panicking later.
+- The online learner skips training on samples with a non-finite gradient.
+- `drift.ADWIN` no longer allocates when merging buckets.
+- `persist` flushes files to the disk before renaming them, so a power loss leaves either the old or the new file.
+
 ## [0.6.0] 2026-11-25
 
 Online learning done right: test-then-train evaluation, concept drift detection with ADWIN and Page-Hinkley, bounded memory and encoders for text streams.

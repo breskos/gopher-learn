@@ -61,6 +61,12 @@ type FitConfig struct {
 	MinDelta float64
 	// Rand shuffles the training data. Nil uses a randomly seeded source.
 	Rand *rand.Rand
+	// ClipNorm limits the L2 norm of every gradient step; zero disables it.
+	ClipNorm float64
+	// Workers is the number of goroutines for large layers. Zero uses
+	// GOMAXPROCS, one trains on the calling goroutine only. The result does
+	// not depend on it.
+	Workers int
 	// OnEpoch is called after every epoch. Returning false stops training.
 	OnEpoch func(EpochStats) bool
 }
@@ -136,8 +142,9 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 		if cfg.Schedule != nil {
 			lr = cfg.Schedule(epoch, cfg.LearningRate)
 		}
-		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay}
+		step := Step{Optimizer: cfg.Optimizer, LearningRate: lr, WeightDecay: cfg.WeightDecay, Workers: cfg.Workers, ClipNorm: cfg.ClipNorm, Rand: rng}
 		var total float64
+		diverged := false
 		order := rng.Perm(train.Len())
 		for i, idx := range order {
 			xs, ys = append(xs, train.X[idx]), append(ys, train.Y[idx])
@@ -148,11 +155,20 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 				return h, err
 			}
 			loss, err := n.TrainBatchWith(xs, ys, step)
+			if errors.Is(err, ErrNonFinite) {
+				diverged = true
+				break
+			}
 			if err != nil {
 				return h, err
 			}
 			total += loss * float64(len(xs))
 			xs, ys = xs[:0], ys[:0]
+		}
+		if diverged {
+			h.Epochs = append(h.Epochs, EpochStats{Epoch: epoch, LearningRate: lr, TrainLoss: math.NaN(), Duration: time.Since(start)})
+			h.Stop = StopDiverged
+			break
 		}
 		stats := EpochStats{Epoch: epoch, LearningRate: lr, TrainLoss: total / float64(train.Len())}
 		if val.Len() > 0 {
@@ -194,6 +210,8 @@ func Fit(ctx context.Context, n *Network, train, val Data, cfg FitConfig) (*Hist
 		for i, l := range bestWeights.Layers {
 			copy(n.Layers[i].Weights, l.Weights)
 			copy(n.Layers[i].Biases, l.Biases)
+			copy(n.Layers[i].Gain, l.Gain)
+			copy(n.Layers[i].Shift, l.Shift)
 		}
 	}
 	return h, nil

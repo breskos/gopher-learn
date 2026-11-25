@@ -113,8 +113,10 @@ func (a *ADWIN) compress() {
 		if len(a.Levels[i]) <= a.MaxBuckets {
 			break
 		}
-		b1, b2 := a.Levels[i][0], a.Levels[i][1]
-		a.Levels[i] = a.Levels[i][2:]
+		level := a.Levels[i]
+		b1, b2 := level[0], level[1]
+		// shift in place to keep the capacity and avoid allocations
+		a.Levels[i] = level[:copy(level, level[2:])]
 		if i+1 == len(a.Levels) {
 			a.Levels = append(a.Levels, nil)
 		}
@@ -169,8 +171,9 @@ func (a *ADWIN) cut() bool {
 
 func (a *ADWIN) dropOldest() {
 	top := len(a.Levels) - 1
-	b := a.Levels[top][0]
-	a.Levels[top] = a.Levels[top][1:]
+	level := a.Levels[top]
+	b := level[0]
+	a.Levels[top] = level[:copy(level, level[1:])]
 	for len(a.Levels) > 0 && len(a.Levels[len(a.Levels)-1]) == 0 {
 		a.Levels = a.Levels[:len(a.Levels)-1]
 	}

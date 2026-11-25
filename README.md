@@ -7,15 +7,48 @@
 
 ![The gopher-learn logo](https://breskos.com/wp-content/uploads/2026/11/gopher.png)
 
-Neural networks in pure Go, with no dependencies outside the standard library.
+Neural networks in pure Go, with no dependencies outside the standard library. Fast enough for services and small enough for embedded devices.
 
 - Models that go from raw CSV records to predictions: column detection, encoders, scaling and the network saved as one file
-- Feed-forward networks (multi-layer perceptrons) on dense matrices with biases, sigmoid, tanh, ReLU, linear and softmax activations, and mini-batch gradient descent
+- Feed-forward networks (multi-layer perceptrons) with sigmoid, tanh, ReLU, linear and softmax activations, SGD, momentum and Adam, dropout, layer normalization and early stopping
+- Fast: batched training on all CPU cores with bit-identical results, allocation-free inference, and float32 models with a compact binary format for small devices
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
 - Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy and more
 - Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
+
+## Performance
+
+Built for ordinary CPUs and small devices: no cgo, no BLAS, no GPU. Measured on an Apple M1 ([details](docs/performance.md)):
+
+| Network | Prediction | Training epoch (1,024 samples) |
+| --- | ---: | ---: |
+| tiny sensor model, 4 × 8 × 2 | 0.12 µs | 0.22 ms |
+| sonar, 60 × 100 × 2 | 2.6 µs | 5.0 ms |
+| MNIST-sized, 784 × 128 × 64 × 10 | 31 µs | 37 ms |
+
+- **Fast kernels:** dot products with eight accumulators and fused multiply-add, cache-friendly batched training; 2 to 5 times faster than v0.6 on medium and large networks.
+- **All cores, same result:** large layers are trained in parallel, and the trained network is bit for bit identical for any number of cores.
+- **No garbage:** prediction with a `Predictor` and every training step allocate no memory.
+- **Robust:** a NaN or infinite gradient never destroys a network, every loader validates what it reads, and all readers are fuzz-tested.
+- **Checked in CI:** every pull request is benchmarked against the base branch and fails on regressions.
+
+## Embedded systems
+
+Train on a computer, predict on the device ([guide](docs/embedded.md), [example](examples/embedded)):
+
+```go
+data, _ := network.Float32().MarshalBinary() // on the computer: 4 bytes per parameter
+
+var n nn.Network32                           // on the device: only the nn package
+if err := n.UnmarshalBinary(data); err != nil {
+	return err
+}
+label, err := n.NewPredictor().Classify(reading) // no allocation
+```
+
+A motor fault detector with 234 parameters is a 1 KB model file; the complete device program is 1.5 to 1.9 MB and classifies 1.5 million readings per second on one core of an M1. CI builds for ARMv7, RISC-V and WebAssembly and runs the tests on 32-bit.
 
 ## Install
 
@@ -149,6 +182,8 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
+- [Performance](docs/performance.md)
+- [Embedded systems](docs/embedded.md)
 - [Engine](docs/engine.md)
 - [Online learning](docs/online.md)
 - [Evaluation](docs/evaluation.md)

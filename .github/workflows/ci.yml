@@ -42,6 +42,44 @@ jobs:
       - run: go test -run='^$' -fuzz='^FuzzReadRecords$' -fuzztime=30s ./model/
       - run: go test -run='^$' -fuzz='^FuzzPredict$' -fuzztime=30s ./model/
       - run: go test -run='^$' -fuzz='^FuzzADWIN$' -fuzztime=30s ./drift/
+      - run: go test -run='^$' -fuzz='^FuzzNetwork32Binary$' -fuzztime=30s ./nn/
+      - run: go test -run='^$' -fuzz='^FuzzRead$' -fuzztime=60s ./persist/
+
+  portability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Test on 32-bit
+        run: GOARCH=386 go test -short ./nn/ ./drift/ ./learn/ ./encoders/ ./online/ ./model/ ./persist/
+      - name: Build for embedded and WebAssembly targets
+        run: |
+          GOOS=linux GOARCH=arm GOARM=7 go build ./...
+          GOOS=linux GOARCH=riscv64 go build ./...
+          GOOS=js GOARCH=wasm go build ./...
+          GOOS=wasip1 GOARCH=wasm go build ./...
+
+  bench:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Compare benchmarks with the base branch
+        shell: bash
+        run: |
+          pkgs="./nn/ ./drift/ ./model/ ./online/"
+          git worktree add ../base "origin/${{ github.base_ref }}"
+          (cd ../base && go test -run='^$' -bench=. -count=6 $pkgs > ../base.txt) || true
+          go test -run='^$' -bench=. -count=6 $pkgs > ../head.txt
+          echo "### Benchmarks against ${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
+          go run ./internal/cmd/benchcheck -base ../base.txt -head ../head.txt | tee -a "$GITHUB_STEP_SUMMARY"
 
   lint:
     runs-on: ubuntu-latest

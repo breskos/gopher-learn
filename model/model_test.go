@@ -155,13 +155,13 @@ func TestTrainOptions(t *testing.T) {
 	}
 
 	m, _, err = Train(context.Background(), records, Config{
-		Target: "buys", Ignore: []string{"id", "color"}, Scale: learn.MinMax,
+		Target: "buys", Ignore: []string{"id", "color"}, Scale: learn.MinMax, Dropout: 0.1, LayerNorm: true, Init: nn.HeNormal,
 		Fit: nn.FitConfig{Epochs: 2, Patience: -1}, Rand: rng,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Encoder != nil || m.Scaler.Method != learn.MinMax {
+	if m.Encoder != nil || m.Scaler.Method != learn.MinMax || !m.Network.Layers[0].Norm || m.Network.Layers[0].Dropout != 0.1 {
 		t.Fatal("numeric-only model should have no encoder and a min-max scaler")
 	}
 	if err := m.Validate(); err != nil {

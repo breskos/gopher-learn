@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"testing"
 )
 
@@ -170,6 +171,48 @@ func TestFitDiverges(t *testing.T) {
 	if h.Stop != StopDiverged {
 		t.Fatalf("stop = %q", h.Stop)
 	}
+	// the network keeps the last finite weights and stays usable
+	for _, l := range n.Layers {
+		for _, w := range append(slices.Clone(l.Weights), l.Biases...) {
+			if math.IsNaN(w) || math.IsInf(w, 0) {
+				t.Fatal("non-finite weight after divergence")
+			}
+		}
+	}
+	if out, err := n.Predict([]float64{1}); err != nil || math.IsNaN(out[0]) {
+		t.Fatalf("Predict after divergence: %v, %v", out, err)
+	}
+
+	// clipping the gradient norm keeps the same setup stable
+	n, _ = New(Config{Inputs: 1, Hidden: []int{4}, Outputs: 1, HiddenActivation: Linear, OutputActivation: Linear, Rand: seeded()})
+	h, err = Fit(context.Background(), n, data, Data{}, FitConfig{Epochs: 200, LearningRate: 0.01, Optimizer: SGD(), BatchSize: 1, ClipNorm: 1})
+	if err != nil || h.Stop != StopEpochs {
+		t.Fatalf("with clipping: %q, %v", h.Stop, err)
+	}
+	if l, _ := n.Loss(data.X, data.Y); l > 5 || math.IsNaN(l) {
+		t.Fatalf("loss %.3f with clipping", l)
+	}
+}
+
+func TestNonFiniteStep(t *testing.T) {
+	n, _ := New(Config{Inputs: 1, Outputs: 1, OutputActivation: Linear, Rand: seeded()})
+	before := slices.Clone(n.Layers[0].Weights)
+	_, err := n.TrainBatchWith([][]float64{{math.Inf(1)}}, [][]float64{{1}}, Step{Optimizer: SGD(), LearningRate: 0.1})
+	if !errors.Is(err, ErrNonFinite) {
+		t.Fatalf("want ErrNonFinite, got %v", err)
+	}
+	if !slices.Equal(before, n.Layers[0].Weights) {
+		t.Fatal("a non-finite step changed the weights")
+	}
+	// clipping scales a large gradient down to the limit
+	n.Layers[0].Weights[0], n.Layers[0].Biases[0] = 0, 0
+	if _, err := n.TrainBatchWith([][]float64{{1}}, [][]float64{{100}}, Step{Optimizer: SGD(), LearningRate: 1, ClipNorm: 2}); err != nil {
+		t.Fatal(err)
+	}
+	w, b := n.Layers[0].Weights[0], n.Layers[0].Biases[0]
+	if math.Abs(math.Hypot(w, b)-2) > 1e-9 {
+		t.Fatalf("update of norm %v, want 2", math.Hypot(w, b))
+	}
 }
 
 func TestFitErrors(t *testing.T) {
@@ -211,4 +254,111 @@ func equalApprox(a, b []float64) bool {
 		}
 	}
 	return true
+}
+
+// TestParallelTrainingIsDeterministic checks that the number of workers
+// does not change the result, down to the last bit.
+func TestParallelTrainingIsDeterministic(t *testing.T) {
+	old := parallelMinWork
+	parallelMinWork = 0
+	defer func() { parallelMinWork = old }()
+
+	rng := rand.New(rand.NewPCG(8, 8))
+	data := spirals(rng, 100)
+	var results [][]float64
+	for _, workers := range []int{1, 3, 8} {
+		n, _ := New(Config{Inputs: 2, Hidden: []int{40, 30}, Outputs: 2, HiddenActivation: Tanh, OutputActivation: Softmax, Rand: rand.New(rand.NewPCG(1, 1))})
+		if n.small() {
+			t.Fatal("the test needs the batched path")
+		}
+		for range 20 {
+			if _, err := n.TrainBatchWith(data.X, data.Y, Step{Optimizer: SGD(), LearningRate: 0.1, Workers: workers}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var w []float64
+		for _, l := range n.Layers {
+			w = append(w, l.Weights...)
+			w = append(w, l.Biases...)
+		}
+		results = append(results, w)
+	}
+	for i := 1; i < len(results); i++ {
+		for j := range results[0] {
+			if results[i][j] != results[0][j] {
+				t.Fatalf("weights differ with %d workers at %d", []int{1, 3, 8}[i], j)
+			}
+		}
+	}
+}
+
+// TestBatchMatchesSingleSamples checks that a batch update equals the mean
+// of the single-sample gradients.
+func TestBatchMatchesSingleSamples(t *testing.T) {
+	rng := rand.New(rand.NewPCG(9, 9))
+	data := spirals(rng, 5)
+	a, _ := New(Config{Inputs: 2, Hidden: []int{4}, Outputs: 2, HiddenActivation: Tanh, Rand: rand.New(rand.NewPCG(1, 1))})
+	b := a.Clone()
+	if _, err := a.TrainBatch(data.X, data.Y, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	// the same update from accumulated single-sample gradients
+	sum := make([][]float64, len(b.Layers))
+	for i, l := range b.Layers {
+		sum[i] = make([]float64, len(l.Weights))
+	}
+	for k := range data.X {
+		c := b.Clone()
+		if _, err := c.TrainBatch(data.X[k:k+1], data.Y[k:k+1], 1); err != nil {
+			t.Fatal(err)
+		}
+		for i, l := range c.Layers {
+			for j, w := range l.Weights {
+				sum[i][j] += b.Layers[i].Weights[j] - w // gradient of sample k
+			}
+		}
+	}
+	for i, l := range b.Layers {
+		for j := range l.Weights {
+			want := l.Weights[j] - 0.5*sum[i][j]/float64(len(data.X))
+			if math.Abs(a.Layers[i].Weights[j]-want) > 1e-12 {
+				t.Fatalf("layer %d weight %d: batch %v, single samples %v", i, j, a.Layers[i].Weights[j], want)
+			}
+		}
+	}
+}
+
+// TestSmallMatchesBatched checks that the sample-by-sample path for small
+// networks computes the same gradients as the batched path.
+func TestSmallMatchesBatched(t *testing.T) {
+	rng := rand.New(rand.NewPCG(10, 10))
+	data := spirals(rng, 9)
+	for _, act := range []Activation{Sigmoid, ReLU, Linear, Softmax} {
+		n, _ := New(Config{Inputs: 2, Hidden: []int{6, 5}, Outputs: 2, HiddenActivation: Tanh, OutputActivation: act, Rand: rand.New(rand.NewPCG(2, 2))})
+		if !n.small() {
+			t.Fatal("the test needs a small network")
+		}
+		s := n.trainState(len(data.X))
+		for k, x := range data.X {
+			copy(s.acts[0][k*2:], x)
+		}
+		lossSmall := n.trainSmall(s, len(data.X), data.Y)
+		gw := make([][]float64, len(n.Layers))
+		for i := range n.Layers {
+			gw[i] = append(slices.Clone(s.gradW[i]), s.gradB[i]...)
+		}
+		n.forwardBatch(s, len(data.X), 1, nil)
+		lossBatch := n.outputDeltas(s, len(data.X), data.Y)
+		n.backwardBatch(s, len(data.X), 1, false)
+		if math.Abs(lossSmall-lossBatch) > 1e-12 {
+			t.Fatalf("%v: loss %v vs %v", act, lossSmall, lossBatch)
+		}
+		for i := range n.Layers {
+			for j, g := range append(slices.Clone(s.gradW[i]), s.gradB[i]...) {
+				if math.Abs(g-gw[i][j]) > 1e-12 {
+					t.Fatalf("%v: layer %d gradient %d: %v vs %v", act, i, j, gw[i][j], g)
+				}
+			}
+		}
+	}
 }

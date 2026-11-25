@@ -57,11 +57,14 @@ The distinguishing feature of gopher-learn.
 
 ## v0.7.0 — Performance and robustness
 
+Goal: fast, small enough for embedded devices and robust against bad data.
+
 - Parallel mini-batch training with goroutines
-- Optional `float32` networks
+- Optional `float32` networks (inference-only `Network32` with a compact binary format)
 - Benchmarks in CI with regression alerts
-- Optional BLAS backend behind a build tag (default stays pure Go)
+- Allocation-free inference, faster pure-Go kernels and hardened loading
 - Dropout, layer normalization, selectable weight initialization
+- ~~Optional BLAS backend behind a build tag~~: dropped, because it needs cgo, which defeats the embedded goal; optimized pure-Go kernels instead
 
 ## v0.8.0 — Model selection and explainability
 

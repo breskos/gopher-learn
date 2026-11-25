@@ -15,7 +15,7 @@ lint:
 	golangci-lint run
 
 bench:
-	go test -run=^$$ -bench=. -benchmem ./nn/
+	go test -run=^$$ -bench=. -benchmem ./nn/ ./drift/ ./model/ ./online/
 
 cover:
 	go test -coverprofile=coverage.out ./...

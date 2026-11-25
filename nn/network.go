@@ -14,11 +14,16 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
+	"sync"
 )
 
 var (
 	// ErrDimension is returned when a vector does not match the network shape.
 	ErrDimension = errors.New("nn: dimension mismatch")
+	// ErrNonFinite is returned by training when a loss or gradient is NaN or
+	// infinite. The update is skipped, so the network stays usable.
+	ErrNonFinite = errors.New("nn: non-finite loss or gradient")
 	// ErrNoLabels is returned by Classify and Scores on a network without labels.
 	ErrNoLabels = errors.New("nn: network has no labels")
 )
@@ -37,18 +42,49 @@ type Config struct {
 	HiddenActivation Activation
 	// OutputActivation is used for the output layer. Defaults to Sigmoid.
 	OutputActivation Activation
+	// Init selects the weight initialization. The default picks He for
+	// ReLU layers and Glorot otherwise.
+	Init Init
+	// Dropout is the share of hidden-layer outputs set to zero during
+	// training (e.g. 0.2) to reduce overfitting. Predictions use all.
+	Dropout float64
+	// LayerNorm normalizes the inputs of every hidden activation per sample
+	// (layer normalization), which stabilizes training of deeper networks.
+	LayerNorm bool
 	// Rand is the source for weight initialization. If nil, a randomly
 	// seeded source is used.
 	Rand *rand.Rand
 }
 
-// Layer is a dense layer: out = activation(Weights · in + Biases).
+// Init is a weight initialization scheme.
+type Init int
+
+const (
+	// InitAuto uses HeUniform for ReLU layers and GlorotUniform otherwise.
+	InitAuto Init = iota
+	// GlorotUniform (Xavier) draws from ±sqrt(6 / (inputs + outputs)).
+	GlorotUniform
+	// GlorotNormal draws from a normal distribution with variance 2 / (inputs + outputs).
+	GlorotNormal
+	// HeUniform draws from ±sqrt(6 / inputs), suited for ReLU.
+	HeUniform
+	// HeNormal draws from a normal distribution with variance 2 / inputs.
+	HeNormal
+)
+
+// Layer is a dense layer: out = activation(norm(Weights · in + Biases)).
 type Layer struct {
 	Inputs     int        `json:"inputs"`
 	Outputs    int        `json:"outputs"`
 	Weights    []float64  `json:"weights"` // Outputs × Inputs, row-major
 	Biases     []float64  `json:"biases"`
 	Activation Activation `json:"activation"`
+	// Dropout is the share of outputs dropped during training.
+	Dropout float64 `json:"dropout,omitempty"`
+	// Norm enables layer normalization with the learned Gain and Shift.
+	Norm  bool      `json:"norm,omitempty"`
+	Gain  []float64 `json:"gain,omitempty"`
+	Shift []float64 `json:"shift,omitempty"`
 }
 
 // Network is a feed-forward neural network.
@@ -57,6 +93,7 @@ type Network struct {
 	Labels []string `json:"labels,omitempty"`
 
 	state *trainState
+	pool  sync.Pool // *Predictor for Predict
 }
 
 // New creates a network with randomly initialized weights.
@@ -80,6 +117,12 @@ func New(cfg Config) (*Network, error) {
 	if !cfg.OutputActivation.valid() {
 		return nil, fmt.Errorf("nn: invalid output activation %v", cfg.OutputActivation)
 	}
+	if cfg.Init < InitAuto || cfg.Init > HeNormal {
+		return nil, fmt.Errorf("nn: invalid initialization %d", cfg.Init)
+	}
+	if cfg.Dropout < 0 || cfg.Dropout >= 1 || math.IsNaN(cfg.Dropout) {
+		return nil, fmt.Errorf("nn: dropout must be in [0, 1), got %v", cfg.Dropout)
+	}
 	rng := cfg.Rand
 	if rng == nil {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -95,12 +138,24 @@ func New(cfg Config) (*Network, error) {
 		if i == len(sizes)-1 {
 			act = cfg.OutputActivation
 		}
-		n.Layers = append(n.Layers, newLayer(sizes[i-1], sizes[i], act, rng))
+		l := newLayer(sizes[i-1], sizes[i], act, cfg.Init, rng)
+		if i < len(sizes)-1 {
+			l.Dropout = cfg.Dropout
+			if cfg.LayerNorm {
+				l.Norm = true
+				l.Gain = make([]float64, l.Outputs)
+				l.Shift = make([]float64, l.Outputs)
+				for j := range l.Gain {
+					l.Gain[j] = 1
+				}
+			}
+		}
+		n.Layers = append(n.Layers, l)
 	}
 	return n, nil
 }
 
-func newLayer(in, out int, act Activation, rng *rand.Rand) *Layer {
+func newLayer(in, out int, act Activation, init Init, rng *rand.Rand) *Layer {
 	l := &Layer{
 		Inputs:     in,
 		Outputs:    out,
@@ -108,13 +163,24 @@ func newLayer(in, out int, act Activation, rng *rand.Rand) *Layer {
 		Biases:     make([]float64, out),
 		Activation: act,
 	}
-	// Glorot/Xavier uniform, He uniform for ReLU.
-	limit := math.Sqrt(6 / float64(in+out))
-	if act == ReLU {
-		limit = math.Sqrt(6 / float64(in))
+	if init == InitAuto {
+		init = GlorotUniform
+		if act == ReLU {
+			init = HeUniform
+		}
 	}
+	glorot, he := 2/float64(in+out), 2/float64(in) // variances
 	for i := range l.Weights {
-		l.Weights[i] = (2*rng.Float64() - 1) * limit
+		switch init {
+		case GlorotUniform:
+			l.Weights[i] = (2*rng.Float64() - 1) * math.Sqrt(3*glorot)
+		case GlorotNormal:
+			l.Weights[i] = rng.NormFloat64() * math.Sqrt(glorot)
+		case HeUniform:
+			l.Weights[i] = (2*rng.Float64() - 1) * math.Sqrt(3*he)
+		case HeNormal:
+			l.Weights[i] = rng.NormFloat64() * math.Sqrt(he)
+		}
 	}
 	return l
 }
@@ -141,6 +207,12 @@ func (n *Network) Validate() error {
 			return fmt.Errorf("nn: softmax is only allowed on the output layer (layer %d)", i)
 		case i > 0 && l.Inputs != n.Layers[i-1].Outputs:
 			return fmt.Errorf("nn: layer %d expects %d inputs, previous layer has %d outputs", i, l.Inputs, n.Layers[i-1].Outputs)
+		case l.Dropout < 0 || l.Dropout >= 1 || math.IsNaN(l.Dropout) || l.Dropout > 0 && i == len(n.Layers)-1:
+			return fmt.Errorf("nn: layer %d has invalid dropout %v", i, l.Dropout)
+		case l.Norm && (i == len(n.Layers)-1 || len(l.Gain) != l.Outputs || len(l.Shift) != l.Outputs):
+			return fmt.Errorf("nn: layer %d has invalid layer normalization", i)
+		case !l.Norm && (l.Gain != nil || l.Shift != nil):
+			return fmt.Errorf("nn: layer %d has normalization parameters without normalization", i)
 		}
 	}
 	if len(n.Labels) > 0 && len(n.Labels) != n.OutputSize() {
@@ -156,17 +228,102 @@ func (n *Network) InputSize() int { return n.Layers[0].Inputs }
 func (n *Network) OutputSize() int { return n.Layers[len(n.Layers)-1].Outputs }
 
 // Predict runs a forward pass and returns a newly allocated output vector.
+// It is safe for concurrent use; the intermediate activations come from a
+// pool, so the output vector is the only allocation. Use a Predictor to
+// avoid that one too.
 func (n *Network) Predict(x []float64) ([]float64, error) {
 	if len(x) != n.InputSize() {
 		return nil, fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
 	}
-	in := x
+	total := 0
 	for _, l := range n.Layers {
-		out := make([]float64, l.Outputs)
-		l.forward(in, out)
-		in = out
+		total += l.Outputs
+	}
+	if total <= smallPredict {
+		// one allocation for all activations is cheaper than the pool
+		buf := make([]float64, total)
+		in := x
+		for _, l := range n.Layers {
+			out := buf[:l.Outputs:l.Outputs]
+			buf = buf[l.Outputs:]
+			l.forward(in, out)
+			in = out
+		}
+		return in, nil
+	}
+	p, _ := n.pool.Get().(*Predictor)
+	if p == nil || !p.fits(n) {
+		p = n.NewPredictor()
+	}
+	out, _ := p.Predict(x)
+	out = slices.Clone(out)
+	n.pool.Put(p)
+	return out, nil
+}
+
+// smallPredict is the number of activations up to which Predict allocates
+// them directly instead of taking a Predictor from the pool.
+const smallPredict = 64
+
+// Predictor runs forward passes of a network without allocating memory.
+// It reuses its buffers, so it must not be used by several goroutines at
+// the same time; create one per goroutine. If the shape of the network
+// changes, create a new Predictor.
+type Predictor struct {
+	n    *Network
+	acts [][]float64
+}
+
+// NewPredictor returns a Predictor for the network.
+func (n *Network) NewPredictor() *Predictor {
+	p := &Predictor{n: n, acts: make([][]float64, len(n.Layers))}
+	for i, l := range n.Layers {
+		p.acts[i] = make([]float64, l.Outputs)
+	}
+	return p
+}
+
+func (p *Predictor) fits(n *Network) bool {
+	if p.n != n || len(p.acts) != len(n.Layers) {
+		return false
+	}
+	for i, l := range n.Layers {
+		if len(p.acts[i]) != l.Outputs {
+			return false
+		}
+	}
+	return true
+}
+
+// Predict runs a forward pass. The returned slice belongs to the Predictor
+// and is overwritten by the next call; copy it to keep it.
+func (p *Predictor) Predict(x []float64) ([]float64, error) {
+	n := p.n
+	if len(x) != n.InputSize() {
+		return nil, fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
+	}
+	if !p.fits(n) {
+		return nil, fmt.Errorf("%w: the network changed its shape, create a new Predictor", ErrDimension)
+	}
+	in := x
+	for i, l := range n.Layers {
+		l.forward(in, p.acts[i])
+		in = p.acts[i]
 	}
 	return in, nil
+}
+
+// Classify returns the label of the output neuron with the highest
+// activation without allocating.
+func (p *Predictor) Classify(x []float64) (string, error) {
+	if len(p.n.Labels) == 0 {
+		return "", ErrNoLabels
+	}
+	out, err := p.Predict(x)
+	if err != nil {
+		return "", err
+	}
+	return p.n.Labels[ArgMax(out)], nil
 }
 
 // Classify returns the label of the output neuron with the highest activation.
@@ -174,11 +331,16 @@ func (n *Network) Classify(x []float64) (string, error) {
 	if len(n.Labels) == 0 {
 		return "", ErrNoLabels
 	}
-	out, err := n.Predict(x)
-	if err != nil {
-		return "", err
+	if len(x) != n.InputSize() {
+		return "", fmt.Errorf("%w: input has %d values, network expects %d", ErrDimension, len(x), n.InputSize())
 	}
-	return n.Labels[ArgMax(out)], nil
+	p, _ := n.pool.Get().(*Predictor)
+	if p == nil || !p.fits(n) {
+		p = n.NewPredictor()
+	}
+	label, err := p.Classify(x)
+	n.pool.Put(p)
+	return label, err
 }
 
 // Scores returns the activation of every output neuron keyed by its label.
@@ -207,21 +369,59 @@ func (n *Network) Clone() *Network {
 		lc := *l
 		lc.Weights = append([]float64(nil), l.Weights...)
 		lc.Biases = append([]float64(nil), l.Biases...)
+		lc.Gain = slices.Clone(l.Gain)
+		lc.Shift = slices.Clone(l.Shift)
 		c.Layers[i] = &lc
 	}
 	return c
 }
 
 func (l *Layer) forward(in, out []float64) {
-	for o := range l.Outputs {
+	in = in[:l.Inputs]
+	out = out[:l.Outputs]
+	for o := range out {
 		row := l.Weights[o*l.Inputs : (o+1)*l.Inputs]
-		sum := l.Biases[o]
-		for i, w := range row {
-			sum += w * in[i]
+		if len(row) < 8 {
+			sum := l.Biases[o]
+			for j, w := range row {
+				sum += w * in[j]
+			}
+			out[o] = sum
+		} else {
+			out[o] = l.Biases[o] + dot(row, in)
 		}
-		out[o] = sum
+	}
+	if l.Norm {
+		layerNorm(out, l.Gain, l.Shift, nil)
 	}
 	l.Activation.apply(out, out)
+}
+
+// normEpsilon keeps layer normalization stable for constant inputs.
+const normEpsilon = 1e-5
+
+// layerNorm normalizes z in place to zero mean and unit variance and applies
+// gain and shift. If zhat is not nil, it receives the normalized values.
+// It returns the inverse standard deviation.
+func layerNorm(z, gain, shift, zhat []float64) float64 {
+	var mean float64
+	for _, v := range z {
+		mean += v
+	}
+	mean /= float64(len(z))
+	var variance float64
+	for _, v := range z {
+		variance += (v - mean) * (v - mean)
+	}
+	istd := 1 / math.Sqrt(variance/float64(len(z))+normEpsilon)
+	for j, v := range z {
+		h := (v - mean) * istd
+		if zhat != nil {
+			zhat[j] = h
+		}
+		z[j] = gain[j]*h + shift[j]
+	}
+	return istd
 }
 
 // ArgMax returns the index of the largest value in v, or -1 if v is empty.
