@@ -30,6 +30,9 @@ func TestAllModelsRoundTrip(t *testing.T) {
 		{StringNGrams, strs, Value{String: "car"}, 0},
 		{FloatExact, floats, Value{Floats: []float64{7, 8, 9}}, 3},
 		{FloatReducer, floats, Value{Floats: []float64{7, 8, 9}}, 1},
+		{StringHashing, strs, Value{String: "red truck"}, 256},
+		{StringTFIDF, strs, Value{String: "red car"}, 5},
+		{FloatCategories, floats, Value{Floats: []float64{1, 4, 3}}, 7},
 	}
 	for _, c := range cases {
 		t.Run(c.typ.String(), func(t *testing.T) {

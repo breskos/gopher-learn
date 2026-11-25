@@ -27,6 +27,15 @@ type Config struct {
 	// FloatReducerCorrelation drops a dimension if its absolute Spearman
 	// correlation with an already kept dimension is at least this value.
 	FloatReducerCorrelation float64 `json:"float_reducer_correlation"`
+
+	// HashDimensions is the number of dimensions of StringHashing.
+	HashDimensions int `json:"hash_dimensions"`
+	// TFIDFMaxTerms is the maximum vocabulary of StringTFIDF; the terms
+	// occurring in most texts are kept.
+	TFIDFMaxTerms int `json:"tfidf_max_terms"`
+	// CategoriesMax is the maximum number of distinct values per dimension
+	// of FloatCategories.
+	CategoriesMax int `json:"categories_max"`
 }
 
 // DefaultConfig returns the default configuration.
@@ -41,5 +50,8 @@ func DefaultConfig() Config {
 		NGramMaxCapacity:          100,
 		NGramCropRatio:            0.05,
 		FloatReducerCorrelation:   0.9,
+		HashDimensions:            256,
+		TFIDFMaxTerms:             1000,
+		CategoriesMax:             100,
 	}
 }
