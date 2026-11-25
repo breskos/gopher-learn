@@ -36,3 +36,7 @@ It shows you how to apply this functionality.
 ## Online Sonar (Online)
 
 Using the data from the Sonar example, this example shows you how to use it in online mode.
+
+## Embedded (float32 model)
+
+Trains a motor fault detector on a computer, exports it as a 1 KB float32 model and runs it on an embedded device with a 1.5 to 1.9 MB program. See [embedded](embedded) and [docs/embedded.md](../docs/embedded.md).

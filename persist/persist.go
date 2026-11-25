@@ -103,7 +103,8 @@ func read(r io.Reader, kind string, v any) error {
 	return json.Unmarshal(env.Data, v)
 }
 
-// save writes atomically by writing to a temporary file and renaming it.
+// save writes atomically by writing to a temporary file, flushing it to the
+// disk and renaming it.
 func save(path string, fn func(io.Writer) error) (err error) {
 	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp*")
 	if err != nil {
@@ -119,6 +120,11 @@ func save(path string, fn func(io.Writer) error) (err error) {
 		return err
 	}
 	if err = fn(f); err != nil {
+		return err
+	}
+	// flush to the disk before the rename, so a power loss leaves either the
+	// old or the new file, never a partial one
+	if err = f.Sync(); err != nil {
 		return err
 	}
 	if err = f.Close(); err != nil {

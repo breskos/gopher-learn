@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.0] Unreleased
 
-Performance and robustness: faster on large networks, as fast on tiny ones, no allocations at inference, float32 models for small devices and protection against bad data. See [docs/performance.md](docs/performance.md).
+Performance and robustness: faster on large networks, as fast on tiny ones, no allocations at inference, float32 models for small devices and protection against bad data. See [docs/performance.md](docs/performance.md) and [docs/embedded.md](docs/embedded.md).
 
 ### Performance (Apple M1, against v0.6)
 | | v0.6 | v0.7 |
@@ -24,11 +24,13 @@ Performance and robustness: faster on large networks, as fast on tiny ones, no a
 - `learn.Set.Validate`; `persist.MaxDocumentSize` and `persist.ErrTooLarge` limit the size of loaded documents.
 - Benchmarks for `nn`, `model`, `online` and `drift`; CI compares them with the base branch on every pull request (`internal/cmd/benchcheck`) and fails on regressions. CI also tests on 32-bit and builds for ARM, RISC-V and WebAssembly.
 - Fuzz tests for every reader in `persist` and for the float32 binary format.
+- `examples/embedded`: train a motor fault detector on a computer and run it as a 1 KB float32 model on a device.
 
 ### Changed
 - `persist.ReadSet` and `ReadOnline` validate what they load (sizes, finite values, classes, configuration), so corrupt files fail on load instead of panicking later.
 - The online learner skips training on samples with a non-finite gradient.
 - `drift.ADWIN` no longer allocates when merging buckets.
+- `persist` flushes files to the disk before renaming them, so a power loss leaves either the old or the new file.
 
 ## [0.6.0] 2026-11-25
 
