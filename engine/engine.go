@@ -1,8 +1,8 @@
 // Package engine trains networks on a fixed data set and keeps the best one.
 //
-// Training starts with a high learning rate which decays linearly. After each
-// round the network is evaluated on a held-out validation split and the best
-// network according to a Criterion is kept.
+// Training runs on nn.Fit and starts with a high learning rate which decays
+// linearly. After each round the network is evaluated on a held-out
+// validation split and the best network according to a Criterion is kept.
 package engine
 
 import (
@@ -79,6 +79,12 @@ type Config struct {
 	RegressionThreshold float64 `json:"regression_threshold"`
 	// BatchSize is the mini-batch size. Values <= 1 mean stochastic gradient descent.
 	BatchSize int `json:"batch_size"`
+	// Optimizer returns a fresh optimizer for every try. Nil uses plain SGD,
+	// which suits the default learning rate; Adam needs a much lower one
+	// (around 0.01).
+	Optimizer func() nn.Optimizer `json:"-"`
+	// WeightDecay is decoupled L2 regularization, e.g. 1e-4.
+	WeightDecay float64 `json:"weight_decay,omitempty"`
 	// HiddenActivation and OutputActivation configure the network. Both default to Sigmoid.
 	HiddenActivation nn.Activation `json:"hidden_activation"`
 	OutputActivation nn.Activation `json:"output_activation"`
@@ -113,6 +119,8 @@ func (c Config) Validate() error {
 		return errors.New("engine: LearningRate must be positive")
 	case c.Decay <= 0:
 		return errors.New("engine: Decay must be positive")
+	case c.WeightDecay < 0:
+		return errors.New("engine: WeightDecay must not be negative")
 	}
 	return nil
 }
@@ -153,14 +161,30 @@ func (e *Engine) Winner() (*nn.Network, *evaluation.Evaluation) {
 	return e.winner, e.winnerEval
 }
 
+// rates returns the learning rate of every round: LearningRate, decreased
+// by Decay after each round while it stays positive.
+func (c Config) rates() []float64 {
+	var out []float64
+	for lr := c.LearningRate; lr > 0; lr -= c.Decay {
+		out = append(out, lr)
+	}
+	return out
+}
+
 // Run trains the networks. It can be cancelled through ctx; the best
 // network found so far stays available through Winner.
+//
+// Every try is one nn.Fit run over all rounds: the learning-rate schedule
+// lowers the rate after each round of Epochs epochs, and at the end of a
+// round the network is evaluated on the validation split.
 func (e *Engine) Run(ctx context.Context, criterion Criterion) error {
 	rng := train.NewRand(e.cfg.Seed)
 	training, validation, err := e.data.StratifiedSplit(e.cfg.TrainingSplit, rng)
 	if err != nil {
 		return err
 	}
+	rates := e.cfg.rates()
+	epochs := e.cfg.Epochs
 	log := e.cfg.Logger
 	for try := range e.cfg.Tries {
 		network, err := nn.New(nn.Config{
@@ -175,30 +199,52 @@ func (e *Engine) Run(ctx context.Context, criterion Criterion) error {
 		if err != nil {
 			return err
 		}
+		optimizer := nn.SGD()
+		if e.cfg.Optimizer != nil {
+			optimizer = e.cfg.Optimizer()
+		}
 		log.Info("start try", "try", try+1, "training", training.Len(), "validation", validation.Len())
-		for lr := e.cfg.LearningRate; lr > 0; lr -= e.cfg.Decay {
-			var loss float64
-			for range e.cfg.Epochs {
-				if loss, err = train.Epoch(ctx, network, training, lr, e.cfg.BatchSize, rng); err != nil {
-					return err
+		var evalErr error
+		h, err := nn.Fit(ctx, network, training.Data(), nn.Data{}, nn.FitConfig{
+			Epochs:       len(rates) * epochs,
+			BatchSize:    max(e.cfg.BatchSize, 1),
+			Optimizer:    optimizer,
+			LearningRate: e.cfg.LearningRate,
+			Schedule:     func(epoch int, _ float64) float64 { return rates[epoch/epochs] },
+			WeightDecay:  e.cfg.WeightDecay,
+			Rand:         rng,
+			OnEpoch: func(s nn.EpochStats) bool {
+				if (s.Epoch+1)%epochs != 0 {
+					return true
 				}
-			}
-			eval, err := evaluation.Evaluate(network, validation, e.cfg.RegressionThreshold)
-			if err != nil {
-				return err
-			}
-			log.Debug("round", "try", try+1, "learning_rate", lr, "loss", loss)
-			if criterion.better(e.winnerEval, eval) {
-				e.winner, e.winnerEval = network.Clone(), eval
-				log.Info("new best network",
-					"try", try+1,
-					"learning_rate", lr,
-					"accuracy", eval.OverallAccuracy(),
-					"balanced_accuracy", eval.OverallBalancedAccuracy(),
-					"f1", eval.OverallFMeasure(),
-					"correct_ratio", eval.CorrectRatio(),
-					"distance", eval.TotalDistance)
-			}
+				eval, err := evaluation.Evaluate(network, validation, e.cfg.RegressionThreshold)
+				if err != nil {
+					evalErr = err
+					return false
+				}
+				log.Debug("round", "try", try+1, "learning_rate", s.LearningRate, "loss", s.TrainLoss)
+				if criterion.better(e.winnerEval, eval) {
+					e.winner, e.winnerEval = network.Clone(), eval
+					log.Info("new best network",
+						"try", try+1,
+						"learning_rate", s.LearningRate,
+						"accuracy", eval.OverallAccuracy(),
+						"balanced_accuracy", eval.OverallBalancedAccuracy(),
+						"f1", eval.OverallFMeasure(),
+						"correct_ratio", eval.CorrectRatio(),
+						"distance", eval.TotalDistance)
+				}
+				return true
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if evalErr != nil {
+			return evalErr
+		}
+		if h.Stop == nn.StopDiverged {
+			log.Warn("training diverged, try ended early", "try", try+1, "epoch", len(h.Epochs))
 		}
 	}
 	return nil

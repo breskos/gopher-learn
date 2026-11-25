@@ -44,11 +44,29 @@ func (n *Network) Train(x, target []float64, learningRate float64) (float64, err
 // returns the mean loss before the update. The loss is cross-entropy for
 // a Softmax output layer and half squared error otherwise.
 func (n *Network) TrainBatch(xs, targets [][]float64, learningRate float64) (float64, error) {
+	return n.TrainBatchWith(xs, targets, Step{Optimizer: SGD(), LearningRate: learningRate})
+}
+
+// Step configures a single update of TrainBatchWith.
+type Step struct {
+	Optimizer    Optimizer
+	LearningRate float64
+	// WeightDecay shrinks the weights (not the biases) by
+	// LearningRate * WeightDecay * w on every step (decoupled L2 regularization).
+	WeightDecay float64
+}
+
+// TrainBatchWith performs one update on a mini-batch with the given
+// optimizer and returns the mean loss before the update.
+func (n *Network) TrainBatchWith(xs, targets [][]float64, step Step) (float64, error) {
 	if len(xs) == 0 {
 		return 0, errors.New("nn: empty batch")
 	}
 	if len(xs) != len(targets) {
 		return 0, fmt.Errorf("nn: %d inputs but %d targets", len(xs), len(targets))
+	}
+	if step.Optimizer == nil {
+		return 0, errors.New("nn: no optimizer")
 	}
 	s := n.trainState()
 	for i := range n.Layers {
@@ -67,13 +85,55 @@ func (n *Network) TrainBatch(xs, targets [][]float64, learningRate float64) (flo
 		loss += n.backprop(s, x, targets[b])
 	}
 
-	scale := learningRate / float64(len(xs))
+	inv := 1 / float64(len(xs))
 	for i, l := range n.Layers {
-		for j, g := range s.gradW[i] {
-			l.Weights[j] -= scale * g
+		for j := range s.gradW[i] {
+			s.gradW[i][j] *= inv
 		}
-		for j, g := range s.gradB[i] {
-			l.Biases[j] -= scale * g
+		for j := range s.gradB[i] {
+			s.gradB[i][j] *= inv
+		}
+		if step.WeightDecay > 0 {
+			shrink := 1 - step.LearningRate*step.WeightDecay
+			for j := range l.Weights {
+				l.Weights[j] *= shrink
+			}
+		}
+		step.Optimizer.Step(2*i, l.Weights, s.gradW[i], step.LearningRate)
+		step.Optimizer.Step(2*i+1, l.Biases, s.gradB[i], step.LearningRate)
+	}
+	return loss * inv, nil
+}
+
+// Loss returns the mean loss of the network on the given samples without
+// changing it: cross-entropy for a Softmax output layer, half squared error
+// otherwise.
+func (n *Network) Loss(xs, targets [][]float64) (float64, error) {
+	if len(xs) != len(targets) {
+		return 0, fmt.Errorf("nn: %d inputs but %d targets", len(xs), len(targets))
+	}
+	if len(xs) == 0 {
+		return 0, nil
+	}
+	softmax := n.Layers[len(n.Layers)-1].Activation == Softmax
+	var loss float64
+	for i, x := range xs {
+		out, err := n.Predict(x)
+		if err != nil {
+			return 0, err
+		}
+		if len(targets[i]) != len(out) {
+			return 0, fmt.Errorf("%w: target %d has %d values, network outputs %d", ErrDimension, i, len(targets[i]), len(out))
+		}
+		for o, y := range out {
+			t := targets[i][o]
+			if softmax {
+				if t > 0 {
+					loss -= t * math.Log(max(y, 1e-15))
+				}
+			} else {
+				loss += 0.5 * (y - t) * (y - t)
+			}
 		}
 	}
 	return loss / float64(len(xs)), nil

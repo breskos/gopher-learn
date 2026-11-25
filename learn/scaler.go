@@ -63,28 +63,45 @@ func FitScaler(s *Set, method ScaleMethod) (*Scaler, error) {
 	if s == nil || s.Len() == 0 {
 		return nil, errors.New("learn: cannot fit a scaler on an empty set")
 	}
-	n := s.InputSize()
+	vectors := make([][]float64, len(s.Samples))
+	for i, sm := range s.Samples {
+		vectors[i] = sm.Vector
+	}
+	return FitScalerVectors(vectors, method)
+}
+
+// FitScalerVectors computes a scaler from feature vectors of equal length.
+func FitScalerVectors(vectors [][]float64, method ScaleMethod) (*Scaler, error) {
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return nil, errors.New("learn: cannot fit a scaler on no data")
+	}
+	n := len(vectors[0])
+	for i, v := range vectors {
+		if len(v) != n {
+			return nil, fmt.Errorf("%w: vector %d has %d features, want %d", nn.ErrDimension, i, len(v), n)
+		}
+	}
 	sc := &Scaler{Method: method, Offset: make([]float64, n), Factor: make([]float64, n)}
 	switch method {
 	case Standardize:
 		// Welford's algorithm for a numerically stable mean and variance.
 		m2 := make([]float64, n)
-		for k, sm := range s.Samples {
-			for i, x := range sm.Vector {
+		for k, v := range vectors {
+			for i, x := range v {
 				d := x - sc.Offset[i]
 				sc.Offset[i] += d / float64(k+1)
 				m2[i] += d * (x - sc.Offset[i])
 			}
 		}
 		for i := range n {
-			std := math.Sqrt(m2[i] / float64(s.Len()))
+			std := math.Sqrt(m2[i] / float64(len(vectors)))
 			sc.Factor[i] = inverse(std)
 		}
 	case MinMax:
-		lo := slices.Clone(s.Samples[0].Vector)
+		lo := slices.Clone(vectors[0])
 		hi := slices.Clone(lo)
-		for _, sm := range s.Samples[1:] {
-			for i, x := range sm.Vector {
+		for _, v := range vectors[1:] {
+			for i, x := range v {
 				lo[i], hi[i] = min(lo[i], x), max(hi[i], x)
 			}
 		}

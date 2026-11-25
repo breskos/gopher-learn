@@ -31,6 +31,8 @@ for each try (Config.Tries), starting from a freshly initialized network:
         keep a copy of the network if it beats the best one so far
 ```
 
+Each try is a single `nn.Fit` run: the decaying learning rate is its schedule, and the evaluation at the end of every round runs in its `OnEpoch` callback. A try whose loss diverges (NaN or infinite) ends early with a warning in the log.
+
 ## Criteria
 
 | Criterion | Picks the network with the highest … | Suited for |
@@ -46,3 +48,7 @@ for each try (Config.Tries), starting from a freshly initialized network:
 The defaults fit most small classification tasks. For regression, set `RegressionThreshold` and tune `LearningRate` and `Decay` to your data.
 `HiddenActivation` and `OutputActivation` select the activation functions (`nn.Sigmoid`, `nn.Tanh`, `nn.ReLU`, `nn.Linear`, `nn.Softmax`); both default to sigmoid.
 For classification, `nn.Softmax` on the output layer trains with cross-entropy and usually converges faster.
+
+`Optimizer` returns a fresh optimizer for every try and defaults to plain SGD, which matches the default learning rate of 0.4. With `nn.DefaultAdam` use a much lower rate, around 0.01, and a matching `Decay`. `WeightDecay` adds decoupled L2 regularization.
+
+To train on raw CSV records with encoders and scaling built in, use the [`model`](model.md) package instead.

@@ -45,12 +45,13 @@ func (e *Evaluation) WriteSummary(w io.Writer, label string) error {
   balanced accuracy:   %.3f
   informedness:        %.3f
   markedness:          %.3f
+  ROC-AUC:             %.3f
 `,
 		label,
 		e.TruePositives(label), e.TrueNegatives(label), e.FalsePositives(label), e.FalseNegatives(label),
 		e.Recall(label), e.Precision(label), e.Fallout(label), e.FalseDiscoveryRate(label),
 		e.NegativePredictiveValue(label), e.Accuracy(label), e.FMeasure(label),
-		e.BalancedAccuracy(label), e.Informedness(label), e.Markedness(label))
+		e.BalancedAccuracy(label), e.Informedness(label), e.Markedness(label), e.AUC(label))
 	return err
 }
 
@@ -66,7 +67,7 @@ func (e *Evaluation) WriteSummaries(w io.Writer) error {
 
 // WriteRegressionSummary writes the results of a regression evaluation.
 func (e *Evaluation) WriteRegressionSummary(w io.Writer) error {
-	_, err := fmt.Fprintf(w, "correct: %d  wrong: %d  ratio: %.3f  distance: %.4f (threshold %v)\n",
-		e.Correct, e.Wrong, e.CorrectRatio(), e.TotalDistance, e.Threshold)
+	_, err := fmt.Fprintf(w, "correct: %d  wrong: %d  ratio: %.3f  distance: %.4f (threshold %v)\nMAE: %.4f  RMSE: %.4f  R²: %.3f\n",
+		e.Correct, e.Wrong, e.CorrectRatio(), e.TotalDistance, e.Threshold, e.MAE(), e.RMSE(), e.R2())
 	return err
 }

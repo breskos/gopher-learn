@@ -11,8 +11,8 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | Version | Theme | Status |
 | --- | --- | --- |
 | v0.4.0 | Rewrite for current Go, Apache-2.0 | released |
-| v0.4.x | Project hygiene | planned |
-| v0.5.0 | Tabular essentials | planned |
+| v0.4.x | Project hygiene | released (v0.4.1) |
+| v0.5.0 | Tabular essentials | in progress |
 | v0.6.0 | Online learning done right | planned |
 | v0.7.0 | Performance and robustness | planned |
 | v0.8.0 | Model selection and explainability | planned |
@@ -20,6 +20,7 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | v0.10.0 | Gradient-boosted trees | planned |
 | v0.11.0 | Interop and tooling | planned |
 | v0.12.0 | WebAssembly and TinyGo | planned |
+| v0.13.0 | Developer experience | planned, after the technical work |
 | v1.0.0 | Stable API | planned |
 
 ## v0.4.x — Project hygiene
@@ -91,6 +92,21 @@ The state of the art for tabular data and usually stronger than neural networks 
 ## v0.12.0 — WebAssembly and TinyGo
 
 - Inference in the browser (WebAssembly) and on edge devices (TinyGo)
+
+## v0.13.0 — Developer experience
+
+Make it easy and fun to explore what gopher-learn can do. This comes after the technical releases; the training callbacks it builds on (`nn.FitConfig.OnEpoch`) are already part of v0.5.
+
+- **Training doctor:** warnings with hints for typical mistakes: stagnating or diverging loss, saturated neurons (learning rate too high), unscaled features, strongly imbalanced classes misleading accuracy, NaN values
+- **Model summary:** `network.Summary()` with layers, activations and parameter count
+- **HTML report:** one call writes `report.html` with loss curves, confusion matrix, per-class metrics and the network summary (standard library and inline SVG only)
+- **Online learning simulator:** replay a stream such as `online/abrupt-drift.csv`, plot accuracy over time, mark the true drift points from the `concept` column and compare strategies
+- **CLI for exploring:** `gopher-learn datasets list`, `gopher-learn try <data set>` with the synthetic data generated on the fly, plus `train` and `predict` (extends the v0.11 CLI)
+- **Browser playground:** gopher-learn compiled to WebAssembly; pick a data set, set layers and learning rate and watch the decision boundary form live (builds on v0.12)
+- **Go notebooks:** interactive Jupyter notebooks in Go (GoNB), one per data set folder
+- **Tour of gopher-learn:** a guided step-by-step introduction like the Go tour: load, scale, train, evaluate, learn online, persist
+- **Service example:** a small HTTP service with `/predict` and `/learn` that keeps learning and survives restarts
+- **Reference results:** the expected quality per synthetic data set in the data catalog, so users know whether their setup does well
 
 ## v1.0.0 — Stable API
 
