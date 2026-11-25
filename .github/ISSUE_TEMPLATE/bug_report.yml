@@ -1,0 +1,31 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: A minimal Go program or test that shows the problem.
+      render: go
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: gopher-learn version
+      placeholder: v0.4.0
+    validations:
+      required: true
+  - type: input
+    id: go
+    attributes:
+      label: Go version and OS
+      placeholder: go1.24.1 linux/amd64

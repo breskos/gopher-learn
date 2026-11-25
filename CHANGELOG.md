@@ -1,7 +1,21 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.4.0] Unreleased
+## [0.4.1] Unreleased
+
+Project hygiene and robustness. No breaking API changes.
+
+### Fixed
+- `learn.Set.ReadSVM` allocated a dense vector sized by the largest feature index for every row, so a single line such as `1 2147483647:1` tried to allocate about 16 GB. Feature indices above 1,048,576 and inputs with more than 134,217,728 values are now rejected with an error.
+- `learn.Set.Add` accepted `NaN` and infinite values (also from CSV and LIBSVM files) and samples without features. They are now rejected; `learn.ErrNonFinite` identifies non-finite values.
+- `online.Online.Inject` added a sample with the wrong number of features to the data set before failing, after which every correct sample was rejected. The dimension is now checked first.
+
+### Added
+- Fuzz tests for the CSV and LIBSVM loaders, run for 30 seconds each in CI.
+- Tests for every package; total coverage is 97.9 %. CI fails below 90 %.
+- `CONTRIBUTING.md`, issue and pull request templates, Go Report Card badge.
+
+## [0.4.0] 2026-11-25
 
 Complete rewrite for current Go. This release breaks the API; see the migration notes below.
 

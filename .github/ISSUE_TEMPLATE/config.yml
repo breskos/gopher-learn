@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Roadmap
+    url: https://github.com/breskos/gopher-learn/blob/master/ROADMAP.md
+    about: Planned features and the scope of the project.
