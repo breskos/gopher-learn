@@ -1,6 +1,6 @@
 # Examples for gopher-learn
 
-![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png "The gopher-learn logo")
+![The gopher-learn logo](../docs/logo/gopher.png)
 
 ## Important
 All the data needed for the examples can be found at [gopher-learn-data](https://github.com/breskos/gopher-learn-data).
