@@ -10,6 +10,8 @@ Tabular essentials. See the [roadmap](ROADMAP.md) for the remaining parts of thi
 - **Feature scaling:** `learn.FitScaler` with `learn.Standardize` (zero mean, unit variance) and `learn.MinMax` (range [0, 1]). A `Scaler` transforms vectors and whole sets, can invert the transformation and serializes to JSON.
 - **Stratified split:** `learn.Set.StratifiedSplit` keeps the class proportions in both parts.
 - **Cross-validation:** `learn.Set.KFold` returns k stratified train/test folds.
+- **Synthetic data sets** for testing and benchmarks (`internal/synth`): Gaussian blobs, imbalanced classes, spirals, high-dimensional data with redundant features, Friedman #1, features on very different scales, a stream with concept drift, German intent phrases, messy CSV variants and sparse LIBSVM data. `go run ./internal/cmd/gendata -out <dir>` writes them as files with a README, streaming rows to disk.
+- **Quality tests** train models on the synthetic data and fail if the accuracy on a held-out test set drops below fixed thresholds; `go test -short` skips them.
 
 ### Changed
 - `engine` and `online` split classification data stratified, so rare classes are always present in training and validation.
