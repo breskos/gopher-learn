@@ -2,9 +2,10 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/breskos/gopher-learn.svg)](https://pkg.go.dev/github.com/breskos/gopher-learn)
 [![CI](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/breskos/gopher-learn)](https://goreportcard.com/report/github.com/breskos/gopher-learn)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-![The gopher-learn logo](docs/logo/gopher.png)
+![The gopher-learn logo](https://breskos.com/wp-content/uploads/2026/11/gopher.png)
 
 Neural networks in pure Go, with no dependencies outside the standard library.
 
@@ -109,6 +110,7 @@ label, err := net.Classify([]float64{0, 1})
 - [Examples](examples), with data in [gopher-learn-data](https://github.com/breskos/gopher-learn-data)
 - [Changelog](CHANGELOG.md), including the migration guide from 0.3
 - [Roadmap](ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 

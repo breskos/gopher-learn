@@ -24,3 +24,12 @@ func TestSpearman(t *testing.T) {
 		t.Error("constant input must yield NaN")
 	}
 }
+
+func TestSpearmanInvalidInput(t *testing.T) {
+	if !math.IsNaN(Spearman([]float64{1, 2}, []float64{1})) {
+		t.Error("different lengths must yield NaN")
+	}
+	if !math.IsNaN(Spearman([]float64{1}, []float64{1})) {
+		t.Error("a single value must yield NaN")
+	}
+}
