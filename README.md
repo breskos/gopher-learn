@@ -108,6 +108,7 @@ label, err := net.Classify([]float64{0, 1})
 - [Encoders](docs/encoders.md)
 - [Examples](examples), with data in [gopher-learn-data](https://github.com/breskos/gopher-learn-data)
 - [Changelog](CHANGELOG.md), including the migration guide from 0.3
+- [Roadmap](ROADMAP.md)
 
 ## License
 
