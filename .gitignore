@@ -21,3 +21,6 @@ todo
 
 # coverage
 coverage.out
+
+# macOS
+.DS_Store

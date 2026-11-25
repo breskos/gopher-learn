@@ -4,7 +4,7 @@
 [![CI](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/breskos/gopher-learn/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-![gopher-learn-logo](http://alexander.bre.sk/x/gopher-neural-small.png "The gopher-learn logo")
+![The gopher-learn logo](docs/logo/gopher.png)
 
 Neural networks in pure Go, with no dependencies outside the standard library.
 
