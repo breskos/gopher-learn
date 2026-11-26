@@ -16,7 +16,7 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | v0.6.0 | Online learning done right | released |
 | v0.7.0 | Performance and robustness | released |
 | v0.8.0 | Model selection and explainability | released |
-| v0.9.0 | Classic models | planned |
+| v0.9.0 | Classic models | released |
 | v0.10.0 | Gradient-boosted trees | planned |
 | v0.11.0 | Interop and tooling | planned |
 | v0.12.0 | WebAssembly and TinyGo | planned |

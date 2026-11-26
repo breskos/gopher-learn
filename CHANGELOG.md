@@ -1,9 +1,11 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.9.0] Unreleased
+## [0.9.0] 2026-11-26
 
 Classic models: fast, exact, deterministic baselines. See [docs/classic.md](docs/classic.md).
+
+No breaking API changes.
 
 ### Added
 - **`linear`:** `FitRegression` (least squares with optional ridge, solved exactly by Cholesky) and `FitLogistic` (multinomial logistic regression with L2, minimized with L-BFGS). Both standardize internally and report coefficients in original units; `ProbabilitiesInto` predicts without allocating.
