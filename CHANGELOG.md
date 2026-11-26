@@ -1,9 +1,11 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [0.8.0] Unreleased
+## [0.8.0] 2026-11-26
 
 Model selection and explainability. See [docs/selection.md](docs/selection.md) and [docs/explain.md](docs/explain.md).
+
+No breaking API changes.
 
 ### Added
 - **Hyperparameter search:** the new `tune` package. `tune.Space` lists the values to try (hidden layers, activation, learning rate, batch size, dropout, weight decay, layer normalization); `Grid` returns every combination, `Random` a sample. `tune.Search` evaluates candidates with k-fold cross-validation on the same folds for all, fits the scaler on the training part of every fold, trains with `nn.Fit` and early stopping and runs trials in parallel with results independent of the number of workers. `tune.Fit` trains the chosen candidate on all data.
