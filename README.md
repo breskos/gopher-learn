@@ -16,6 +16,7 @@ Neural networks in pure Go, with no dependencies outside the standard library. F
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
 - Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy, ROC-AUC, log loss, RMSE, R² and more
+- Classic models as fast, exact baselines: linear and logistic regression, k-means clustering and PCA
 - Model selection and explainability: grid and random hyperparameter search with cross-validation, permutation feature importance
 - Versioned JSON persistence for models, networks, data sets, online learners, encoders and scalers
 
@@ -90,6 +91,9 @@ Requires Go 1.24 or newer.
 | [`online`](online) | Continuous training from a stream of samples |
 | [`drift`](drift) | Concept drift detection: ADWIN and Page-Hinkley |
 | [`evaluation`](evaluation) | Metrics and reports |
+| [`linear`](linear) | Linear (ridge) and logistic regression |
+| [`cluster`](cluster) | k-means clustering |
+| [`pca`](pca) | Principal component analysis |
 | [`tune`](tune) | Hyperparameter search with cross-validation |
 | [`explain`](explain) | Permutation feature importance |
 | [`encoders`](encoders) | Feature encoding for strings and float vectors |
@@ -205,6 +209,7 @@ label, err := net.Classify([]float64{0, 1})
 ## Documentation
 
 - [Models](docs/model.md)
+- [Classic models](docs/classic.md)
 - [Model selection](docs/selection.md)
 - [Explainability](docs/explain.md)
 - [Performance](docs/performance.md)

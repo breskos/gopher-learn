@@ -5,7 +5,8 @@
 // version, so incompatible files are rejected with a clear error instead of
 // silently producing a broken model.
 //
-// Format version 2 adds models and scalers. Files written with version 1
+// Format version 2 adds models, scalers and the classic models (linear and
+// logistic regression, k-means, PCA). Files written with version 1
 // stay readable; new files are always written with the current version.
 package persist
 
@@ -17,11 +18,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/breskos/gopher-learn/cluster"
 	"github.com/breskos/gopher-learn/encoders"
 	"github.com/breskos/gopher-learn/learn"
+	"github.com/breskos/gopher-learn/linear"
 	"github.com/breskos/gopher-learn/model"
 	"github.com/breskos/gopher-learn/nn"
 	"github.com/breskos/gopher-learn/online"
+	"github.com/breskos/gopher-learn/pca"
 )
 
 // Version is the current format version.
@@ -34,6 +38,11 @@ const (
 	kindEncoder = "encoder"
 	kindModel   = "model"
 	kindScaler  = "scaler"
+
+	kindRegression = "linear-regression"
+	kindLogistic   = "logistic-regression"
+	kindKMeans     = "kmeans"
+	kindPCA        = "pca"
 )
 
 // minVersion is the oldest format version that can be read per kind.
@@ -44,6 +53,11 @@ var minVersion = map[string]int{
 	kindEncoder: 1,
 	kindModel:   2,
 	kindScaler:  2,
+
+	kindRegression: 2,
+	kindLogistic:   2,
+	kindKMeans:     2,
+	kindPCA:        2,
 }
 
 // ErrFormat is returned for documents of the wrong kind or an unsupported version.
@@ -289,3 +303,80 @@ func SaveScaler(path string, sc *learn.Scaler) error {
 
 // LoadScaler reads a scaler from a file.
 func LoadScaler(path string) (*learn.Scaler, error) { return load(path, ReadScaler) }
+
+// validator is implemented by every type that checks itself after decoding.
+type validator interface{ Validate() error }
+
+// readValid decodes a document of the given kind into v and validates it.
+func readValid[T validator](r io.Reader, kind string, v T) (T, error) {
+	var zero T
+	if err := read(r, kind, v); err != nil {
+		return zero, err
+	}
+	if err := v.Validate(); err != nil {
+		return zero, err
+	}
+	return v, nil
+}
+
+// WriteRegression writes a linear regression to w.
+func WriteRegression(w io.Writer, m *linear.Regression) error { return write(w, kindRegression, m) }
+
+// ReadRegression reads and validates a linear regression from r.
+func ReadRegression(r io.Reader) (*linear.Regression, error) {
+	return readValid(r, kindRegression, &linear.Regression{})
+}
+
+// SaveRegression writes a linear regression to a file.
+func SaveRegression(path string, m *linear.Regression) error {
+	return save(path, func(w io.Writer) error { return WriteRegression(w, m) })
+}
+
+// LoadRegression reads a linear regression from a file.
+func LoadRegression(path string) (*linear.Regression, error) { return load(path, ReadRegression) }
+
+// WriteLogistic writes a logistic regression to w.
+func WriteLogistic(w io.Writer, m *linear.Logistic) error { return write(w, kindLogistic, m) }
+
+// ReadLogistic reads and validates a logistic regression from r.
+func ReadLogistic(r io.Reader) (*linear.Logistic, error) {
+	return readValid(r, kindLogistic, &linear.Logistic{})
+}
+
+// SaveLogistic writes a logistic regression to a file.
+func SaveLogistic(path string, m *linear.Logistic) error {
+	return save(path, func(w io.Writer) error { return WriteLogistic(w, m) })
+}
+
+// LoadLogistic reads a logistic regression from a file.
+func LoadLogistic(path string) (*linear.Logistic, error) { return load(path, ReadLogistic) }
+
+// WriteKMeans writes a k-means model to w.
+func WriteKMeans(w io.Writer, m *cluster.KMeans) error { return write(w, kindKMeans, m) }
+
+// ReadKMeans reads and validates a k-means model from r.
+func ReadKMeans(r io.Reader) (*cluster.KMeans, error) {
+	return readValid(r, kindKMeans, &cluster.KMeans{})
+}
+
+// SaveKMeans writes a k-means model to a file.
+func SaveKMeans(path string, m *cluster.KMeans) error {
+	return save(path, func(w io.Writer) error { return WriteKMeans(w, m) })
+}
+
+// LoadKMeans reads a k-means model from a file.
+func LoadKMeans(path string) (*cluster.KMeans, error) { return load(path, ReadKMeans) }
+
+// WritePCA writes a principal component analysis to w.
+func WritePCA(w io.Writer, m *pca.PCA) error { return write(w, kindPCA, m) }
+
+// ReadPCA reads and validates a principal component analysis from r.
+func ReadPCA(r io.Reader) (*pca.PCA, error) { return readValid(r, kindPCA, &pca.PCA{}) }
+
+// SavePCA writes a principal component analysis to a file.
+func SavePCA(path string, m *pca.PCA) error {
+	return save(path, func(w io.Writer) error { return WritePCA(w, m) })
+}
+
+// LoadPCA reads a principal component analysis from a file.
+func LoadPCA(path string) (*pca.PCA, error) { return load(path, ReadPCA) }
