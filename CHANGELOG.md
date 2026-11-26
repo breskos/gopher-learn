@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.10.0] 2026-11-26
 
 Production online learning. See [docs/service.md](docs/service.md).
 
