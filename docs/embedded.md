@@ -14,7 +14,7 @@ gopher-learn runs on small devices: single-board computers, industrial gateways,
 | Memory while predicting | the model plus one activation buffer per layer; no allocations per prediction |
 | Model loading | 1.4 µs for an 867-parameter model, 8.7 µs for 6,302 parameters (Apple M1) |
 
-TinyGo is not supported yet; it is planned for v0.12.
+TinyGo is not supported yet; it is planned for v0.13.
 
 ## The workflow
 

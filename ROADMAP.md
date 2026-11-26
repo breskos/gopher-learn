@@ -17,10 +17,11 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | v0.7.0 | Performance and robustness | released |
 | v0.8.0 | Model selection and explainability | released |
 | v0.9.0 | Classic models | released |
-| v0.10.0 | Gradient-boosted trees | planned |
-| v0.11.0 | Interop and tooling | planned |
-| v0.12.0 | WebAssembly and TinyGo | planned |
-| v0.13.0 | Developer experience | planned, after the technical work |
+| v0.10.0 | Production online learning | planned |
+| v0.11.0 | Gradient-boosted trees | planned |
+| v0.12.0 | Interop and tooling | planned |
+| v0.13.0 | WebAssembly and TinyGo | planned |
+| v0.14.0 | Developer experience | planned, after the technical work |
 | v1.0.0 | Stable API | planned |
 
 ## v0.4.x — Project hygiene
@@ -79,24 +80,49 @@ Strong, fast baselines that every tabular project needs.
 - k-means clustering
 - PCA
 
-## v0.10.0 — Gradient-boosted trees
+## v0.10.0 — Production online learning
+
+Goal: a stable online learning service that works with delayed feedback and later corrections of labels and values, and protects the live model against noisy data and degradation.
+
+Data flow: input → `event_id` and live prediction → park the input vector (ID store) → later feedback or correction by `event_id` → outlier filter and replay buffer → online update (with clipping and drift check) → guardrail test → live swap or rollback.
+
+### Functional requirements
+
+| ID | Requirement | Description | Today |
+| --- | --- | --- | --- |
+| FR-01 | ID-based delayed feedback | Every prediction gets a unique `event_id`. Its input vector is stored temporarily until the true label or regression value arrives. | new |
+| FR-02 | Later correction | Labels or values already given can be overwritten by `event_id`, which triggers another update. | new |
+| FR-03 | Experience replay | A sliding window (ring buffer) of past labeled samples, addressable by `event_id`. Every online update trains the new or corrected sample together with a sample from the buffer to prevent catastrophic forgetting. | partly: bounded memory (`online.Window`, `online.Reservoir`), but without IDs, and the quick update trains the new sample alone |
+| FR-04 | Concept drift detection | Continuous monitoring of the prediction error. On significant changes the learning rate is adapted automatically or a warning is raised. | partly: ADWIN and Page-Hinkley with `OnDrift` and forgetting; adapting the learning rate is missing |
+| FR-05 | Exploration vs. exploitation (optional, for agents) | Controlled trying of alternative actions (e.g. ε-greedy) to avoid dead ends caused by one-sided feedback. | new |
+
+### Non-functional requirements and guardrails
+
+| ID | Requirement | Description | Today |
+| --- | --- | --- | --- |
+| NFR-01 | Outlier filter and plausibility | Incoming feedback is checked for outliers and valid ranges before training, so single corrupt values cannot destroy the network. | partly: NaN and infinite values are rejected; ranges and robust outlier detection are missing. (Regression no longer needs targets in [0, 1]: linear outputs and target scaling exist since v0.5.) |
+| NFR-02 | Gradient clipping / step limit | The largest weight change per update is limited. | partly: `nn.Step.ClipNorm` and non-finite steps are skipped, but the online quick updates do not clip yet |
+| NFR-03 | Snapshot versioning and auto-rollback | Model weights are persisted regularly. Before going live (or periodically) the network is checked against a stable reference set; if the quality drops, it is rolled back automatically. | partly: atomic `persist` saves; versioned snapshots, reference checks and rollback are missing |
+| NFR-04 | Decoupled inference and training | Live predictions must not be blocked or see inconsistent weights while updates run (shadow update and atomic model swap). | new: prediction is safe from many goroutines, but not while the same network trains |
+
+## v0.11.0 — Gradient-boosted trees
 
 The state of the art for tabular data and usually stronger than neural networks there.
 
 - Gradient-boosted decision trees for classification and regression
 - Same `Fit` / `Predict` / persistence interface as the other models
 
-## v0.11.0 — Interop and tooling
+## v0.12.0 — Interop and tooling
 
 - **ONNX export** to serve gopher-learn models anywhere and to exchange models with the Python ecosystem
 - **CLI:** `gopher-learn train data.csv` and `gopher-learn evaluate`
 - **Serving:** `gopher-learn serve model.json` as an HTTP endpoint
 
-## v0.12.0 — WebAssembly and TinyGo
+## v0.13.0 — WebAssembly and TinyGo
 
 - Inference in the browser (WebAssembly) and on edge devices (TinyGo)
 
-## v0.13.0 — Developer experience
+## v0.14.0 — Developer experience
 
 Make it easy and fun to explore what gopher-learn can do. This comes after the technical releases; the training callbacks it builds on (`nn.FitConfig.OnEpoch`) are already part of v0.5.
 
@@ -104,8 +130,8 @@ Make it easy and fun to explore what gopher-learn can do. This comes after the t
 - **Model summary:** `network.Summary()` with layers, activations and parameter count
 - **HTML report:** one call writes `report.html` with loss curves, confusion matrix, per-class metrics and the network summary (standard library and inline SVG only)
 - **Online learning simulator:** replay a stream such as `online/abrupt-drift.csv`, plot accuracy over time, mark the true drift points from the `concept` column and compare strategies
-- **CLI for exploring:** `gopher-learn datasets list`, `gopher-learn try <data set>` with the synthetic data generated on the fly, plus `train` and `predict` (extends the v0.11 CLI)
-- **Browser playground:** gopher-learn compiled to WebAssembly; pick a data set, set layers and learning rate and watch the decision boundary form live (builds on v0.12)
+- **CLI for exploring:** `gopher-learn datasets list`, `gopher-learn try <data set>` with the synthetic data generated on the fly, plus `train` and `predict` (extends the v0.12 CLI)
+- **Browser playground:** gopher-learn compiled to WebAssembly; pick a data set, set layers and learning rate and watch the decision boundary form live (builds on v0.13)
 - **Go notebooks:** interactive Jupyter notebooks in Go (GoNB), one per data set folder
 - **Tour of gopher-learn:** a guided step-by-step introduction like the Go tour: load, scale, train, evaluate, learn online, persist
 - **Service example:** a small HTTP service with `/predict` and `/learn` that keeps learning and survives restarts
