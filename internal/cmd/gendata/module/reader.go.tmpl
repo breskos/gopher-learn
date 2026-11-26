@@ -38,7 +38,7 @@ const (
 type Dataset struct {
 	// Path is the file path relative to this folder, e.g. "online/abrupt-drift.csv".
 	Path string
-	// Folder is the purpose of the data set: classification, regression, online, text, loading or benchmark.
+	// Folder is the purpose of the data set: classification, regression, online, service, text, loading or benchmark.
 	Folder      string
 	Description string
 	// Task is "classification" or "regression".
@@ -57,6 +57,9 @@ type Dataset struct {
 	Applied bool
 	// AllowMissing marks files with empty fields on purpose.
 	AllowMissing bool
+	// RawTarget marks regression files whose target is in raw units
+	// instead of [0, 1].
+	RawTarget bool
 }
 
 // Lookup returns the data set with the given path.

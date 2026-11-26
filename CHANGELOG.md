@@ -1,6 +1,25 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Production online learning. See [docs/service.md](docs/service.md).
+
+No breaking API changes.
+
+### Added
+- **`service`:** a production online learning service around a network.
+  - `Predict` answers with the live network and parks the input under an event ID (TTL and capacity bounded); `Feedback` / `FeedbackValue` deliver the label or value later and in any order; feedback for an already labeled event is a correction.
+  - Every update trains the new sample together with a mini-batch from a replay buffer addressed by event ID, with gradient clipping, on a shadow copy of the network.
+  - An outlier filter (finite values, ranges, robust z-score of regression values, custom check) rejects implausible feedback before training.
+  - The errors of the live predictions feed ADWIN or Page-Hinkley; a drift raises a warning, boosts the learning rate for a while and makes the replay buffer forget the old concept.
+  - Every 100 updates a guardrail scores the shadow copy on a reference set or a rolling holdout set: it goes live by an atomic swap, or it is rolled back. Versions are kept in a history, can be rolled back by hand and saved to a snapshot directory.
+  - `Scaler` and `TargetScaler`: raw features and values in, raw values out.
+  - Optional ε-greedy exploration for classification.
+  - `Predict` never waits for training: 0.4 µs including parking; one update takes 5.7 µs for a small network.
+- **Example [online-service](examples/online-service):** trains on the history of an event log, replays the rest with delayed, wrong and corrupt feedback, corrections and a drift (live 89.9 % vs. frozen 63.7 % accuracy after the drift), and serves the model over HTTP.
+- **Synthetic data:** the event logs `service/offers.csv` and `service/deliveries.csv` with feedback delays, wrong and corrupt feedback, corrections and a concept drift; regression data sets can now be in raw units (`RawTarget`).
+
 ## [0.9.0] 2026-11-26
 
 Classic models: fast, exact, deterministic baselines. See [docs/classic.md](docs/classic.md).

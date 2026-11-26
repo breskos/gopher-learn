@@ -133,7 +133,7 @@ func writeCatalog(w io.Writer, sets []synth.Dataset, rows []int) error {
 		for _, flag := range []struct {
 			name string
 			on   bool
-		}{{"Ordered", d.Ordered}, {"Applied", d.Applied}, {"AllowMissing", d.AllowMissing}} {
+		}{{"Ordered", d.Ordered}, {"Applied", d.Applied}, {"AllowMissing", d.AllowMissing}, {"RawTarget", d.RawTarget}} {
 			if flag.on {
 				fmt.Fprintf(&b, "\t\t%s: true,\n", flag.name)
 			}
@@ -177,6 +177,12 @@ err := d.Read(".", func(r synthetic.Record) error {
 	}
 	return nil
 })`,
+	"service": `// replay the log in time order: predictions at t, feedback at
+// t+feedback_delay, corrections at t+feedback_delay+correction_delay
+s, _ := service.New(net, nn.Classification, service.Config{Scaler: scaler, Reference: trusted})
+p, _ := s.Predict(features)        // at t
+_, err := s.Feedback(p.ID, feedback) // later; again with the true label as correction
+// a complete replay: examples/online-service in gopher-learn`,
 	"text": `enc := encoders.New("intents")
 in := encoders.NewInput(encoders.String)
 d, _ := synthetic.Lookup("text/intents.phrase")
@@ -232,6 +238,9 @@ func writeReadme(w io.Writer, sets []synth.Dataset, rows []int, seed uint64, sca
 			kind := "benchmark"
 			if d.Applied {
 				kind = "sensor"
+				if d.Folder() == "service" {
+					kind = "event log"
+				}
 			}
 			fmt.Fprintf(&b, "| [%s](%s) | %v | %d | %s |\n", d.Path, d.Path, d.Task, rows[i], kind)
 		}

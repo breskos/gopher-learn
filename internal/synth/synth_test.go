@@ -78,7 +78,7 @@ func TestLoadable(t *testing.T) {
 			if s.InputSize() != wantFeatures || len(s.Features) != wantFeatures {
 				t.Fatalf("input size %d, features %v, want %d", s.InputSize(), s.Features, wantFeatures)
 			}
-			if d.Task == nn.Regression {
+			if d.Task == nn.Regression && !d.RawTarget {
 				for _, sm := range s.Samples {
 					if sm.Value < 0 || sm.Value > 1 {
 						t.Fatalf("regression target %v outside [0, 1]", sm.Value)

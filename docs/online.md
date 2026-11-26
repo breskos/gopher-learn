@@ -2,6 +2,8 @@
 
 The `online` package trains a network on the fly. Samples arrive one by one and the network adapts, which suits streams, services that keep learning and autonomous agents. The [`drift`](../drift) package detects when the data changes.
 
+For a live service where labels arrive later than the predictions, can be corrected or corrupt, and the live model must be protected, use the [`service`](../service) package ([guide](service.md)).
+
 ## Learn from a stream
 
 ```go

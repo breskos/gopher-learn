@@ -57,6 +57,9 @@ type Dataset struct {
 	Applied bool
 	// AllowMissing marks data sets that contain empty fields on purpose.
 	AllowMissing bool
+	// RawTarget marks regression data sets whose target is in raw units
+	// instead of [0, 1].
+	RawTarget bool
 
 	generate func(rng *rand.Rand, n int, emit func([]string) error) error
 }
