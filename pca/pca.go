@@ -56,8 +56,8 @@ type Config struct {
 }
 
 // Fit computes the principal components of the points from the eigen
-// decomposition of their covariance matrix (Jacobi method). It takes about
-// O(n·d² + d³) time for n points with d features.
+// decomposition of their covariance matrix. It takes O(n·d² + d³) time for
+// n points with d features.
 func Fit(points [][]float64, cfg Config) (*PCA, error) {
 	if len(points) < 2 {
 		return nil, errors.New("pca: need at least two points")
@@ -122,60 +122,59 @@ func Fit(points [][]float64, cfg Config) (*PCA, error) {
 }
 
 // covariance returns the d×d covariance matrix of the centered (and
-// optionally scaled) points, computed in fixed chunks summed in order.
+// optionally scaled) points. The rows of the matrix are split across
+// goroutines; every entry is summed over the points in the same order, so
+// the result does not depend on the machine.
 func covariance(points [][]float64, mean, scale []float64) []float64 {
 	n, d := len(points), len(mean)
-	parts := 1
-	if n*d*d >= 1<<16 {
-		parts = min(64, n)
-	}
-	size := (n + parts - 1) / parts
-	parts = (n + size - 1) / size
-	sums := make([][]float64, parts)
-	work := func(c int) {
-		s := make([]float64, d*d)
-		z := make([]float64, d)
-		for _, p := range points[c*size : min((c+1)*size, n)] {
-			for j, v := range p {
-				z[j] = v - mean[j]
-				if scale != nil {
-					z[j] /= scale[j]
-				}
+	z := make([]float64, n*d)
+	for i, p := range points {
+		for j, v := range p {
+			c := v - mean[j]
+			if scale != nil {
+				c /= scale[j]
 			}
-			for i, zi := range z {
-				row := s[i*d : i*d+i+1]
-				for j := range row {
-					row[j] += zi * z[j]
-				}
-			}
+			z[i*d+j] = c
 		}
-		sums[c] = s
-	}
-	if parts == 1 {
-		work(0)
-	} else {
-		var wg sync.WaitGroup
-		next := make(chan int, parts)
-		for c := range parts {
-			next <- c
-		}
-		close(next)
-		for range min(runtime.GOMAXPROCS(0), parts) {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for c := range next {
-					work(c)
-				}
-			}()
-		}
-		wg.Wait()
 	}
 	cov := make([]float64, d*d)
-	for _, s := range sums {
-		for i, v := range s {
-			cov[i] += v
+	rows := func(lo, hi int) {
+		for k := range n {
+			x := z[k*d : (k+1)*d]
+			for i := lo; i < hi; i++ {
+				xi := x[i]
+				row := cov[i*d : i*d+i+1]
+				for j := range row {
+					row[j] += xi * x[j]
+				}
+			}
 		}
+	}
+	workers := 1
+	if n*d*d >= 1<<18 {
+		workers = min(runtime.GOMAXPROCS(0), d)
+	}
+	if workers == 1 {
+		rows(0, d)
+	} else {
+		// row i costs i+1 multiply-adds: split the triangle into equal work
+		var wg sync.WaitGroup
+		lo := 0
+		for w := range workers {
+			hi := int(math.Round(float64(d) * math.Sqrt(float64(w+1)/float64(workers))))
+			if w == workers-1 {
+				hi = d
+			}
+			if hi > lo {
+				wg.Add(1)
+				go func(lo, hi int) {
+					defer wg.Done()
+					rows(lo, hi)
+				}(lo, hi)
+			}
+			lo = hi
+		}
+		wg.Wait()
 	}
 	for i := range d {
 		for j := 0; j <= i; j++ {
@@ -187,72 +186,41 @@ func covariance(points [][]float64, mean, scale []float64) []float64 {
 }
 
 // eigen returns the eigenvalues of the symmetric d×d matrix a in
-// descending order and the matching unit eigenvectors as rows, using the
-// cyclic Jacobi method. The sign of every vector is chosen so that its
-// largest entry is positive.
+// descending order and the matching unit eigenvectors as rows. It reduces
+// a to tridiagonal form with Householder reflections and diagonalizes that
+// with the implicit QL method (the symmetric algorithms of EISPACK as used
+// in JAMA), which takes O(d³) time. The sign of every vector is chosen so
+// that its largest entry is positive.
 func eigen(a []float64, d int) ([]float64, [][]float64) {
-	v := make([]float64, d*d)
-	for i := range d {
-		v[i*d+i] = 1
+	V := make([][]float64, d)
+	for i := range V {
+		V[i] = slices.Clone(a[i*d : (i+1)*d])
 	}
-	var norm float64
-	for _, x := range a {
-		norm += x * x
-	}
-	for sweep := 0; sweep < 100; sweep++ {
-		var off float64
-		for p := range d {
-			for q := p + 1; q < d; q++ {
-				off += a[p*d+q] * a[p*d+q]
-			}
-		}
-		if off <= 1e-30*norm || off == 0 {
-			break
-		}
-		for p := range d {
-			for q := p + 1; q < d; q++ {
-				apq := a[p*d+q]
-				if math.Abs(apq) <= 1e-300 {
-					continue
-				}
-				theta := (a[q*d+q] - a[p*d+p]) / (2 * apq)
-				t := 1 / (math.Abs(theta) + math.Sqrt(theta*theta+1))
-				if theta < 0 {
-					t = -t
-				}
-				c := 1 / math.Sqrt(t*t+1)
-				s := t * c
-				for k := range d { // columns p and q
-					akp, akq := a[k*d+p], a[k*d+q]
-					a[k*d+p] = c*akp - s*akq
-					a[k*d+q] = s*akp + c*akq
-				}
-				for k := range d { // rows p and q
-					apk, aqk := a[p*d+k], a[q*d+k]
-					a[p*d+k] = c*apk - s*aqk
-					a[q*d+k] = s*apk + c*aqk
-				}
-				for k := range d {
-					vkp, vkq := v[k*d+p], v[k*d+q]
-					v[k*d+p] = c*vkp - s*vkq
-					v[k*d+q] = s*vkp + c*vkq
-				}
-			}
+	vals, e := make([]float64, d), make([]float64, d)
+	tred2(V, vals, e)
+	// the QL rotations combine columns of V; on the transpose they combine
+	// rows, which are contiguous in memory
+	VT := make([][]float64, d)
+	for i := range VT {
+		VT[i] = make([]float64, d)
+		for k := range d {
+			VT[i][k] = V[k][i]
 		}
 	}
+	tql2(VT, vals, e)
 	order := make([]int, d)
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(i, j int) bool { return a[order[i]*d+order[i]] > a[order[j]*d+order[j]] })
+	sort.SliceStable(order, func(i, j int) bool { return vals[order[i]] > vals[order[j]] })
 	values := make([]float64, d)
 	vectors := make([][]float64, d)
 	for r, i := range order {
-		values[r] = a[i*d+i]
+		values[r] = vals[i]
 		vec := make([]float64, d)
 		big := 0
 		for k := range d {
-			vec[k] = v[k*d+i]
+			vec[k] = VT[i][k]
 			if math.Abs(vec[k]) > math.Abs(vec[big]) {
 				big = k
 			}
@@ -265,6 +233,169 @@ func eigen(a []float64, d int) ([]float64, [][]float64) {
 		vectors[r] = vec
 	}
 	return values, vectors
+}
+
+// tred2 reduces the symmetric matrix V to tridiagonal form with diagonal d
+// and subdiagonal e, accumulating the orthogonal transformation in V.
+func tred2(V [][]float64, d, e []float64) {
+	n := len(d)
+	for j := range n {
+		d[j] = V[n-1][j]
+	}
+	for i := n - 1; i > 0; i-- {
+		var scale, h float64
+		for k := range i {
+			scale += math.Abs(d[k])
+		}
+		if scale == 0 {
+			e[i] = d[i-1]
+			for j := range i {
+				d[j] = V[i-1][j]
+				V[i][j] = 0
+				V[j][i] = 0
+			}
+		} else {
+			for k := range i {
+				d[k] /= scale
+				h += d[k] * d[k]
+			}
+			f := d[i-1]
+			g := math.Sqrt(h)
+			if f > 0 {
+				g = -g
+			}
+			e[i] = scale * g
+			h -= f * g
+			d[i-1] = f - g
+			for j := range i {
+				e[j] = 0
+			}
+			for j := range i {
+				f = d[j]
+				V[j][i] = f
+				g = e[j] + V[j][j]*f
+				for k := j + 1; k <= i-1; k++ {
+					g += V[k][j] * d[k]
+					e[k] += V[k][j] * f
+				}
+				e[j] = g
+			}
+			f = 0
+			for j := range i {
+				e[j] /= h
+				f += e[j] * d[j]
+			}
+			hh := f / (h + h)
+			for j := range i {
+				e[j] -= hh * d[j]
+			}
+			for j := range i {
+				f, g = d[j], e[j]
+				for k := j; k <= i-1; k++ {
+					V[k][j] -= f*e[k] + g*d[k]
+				}
+				d[j] = V[i-1][j]
+				V[i][j] = 0
+			}
+		}
+		d[i] = h
+	}
+	for i := 0; i < n-1; i++ {
+		V[n-1][i] = V[i][i]
+		V[i][i] = 1
+		h := d[i+1]
+		if h != 0 {
+			for k := 0; k <= i; k++ {
+				d[k] = V[k][i+1] / h
+			}
+			for j := 0; j <= i; j++ {
+				var g float64
+				for k := 0; k <= i; k++ {
+					g += V[k][i+1] * V[k][j]
+				}
+				for k := 0; k <= i; k++ {
+					V[k][j] -= g * d[k]
+				}
+			}
+		}
+		for k := 0; k <= i; k++ {
+			V[k][i+1] = 0
+		}
+	}
+	for j := range n {
+		d[j] = V[n-1][j]
+		V[n-1][j] = 0
+	}
+	V[n-1][n-1] = 1
+	e[0] = 0
+}
+
+// tql2 diagonalizes the tridiagonal matrix (d, e) with the implicit QL
+// method and applies the rotations to the rows of VT, the transposed
+// transformation of tred2. d receives the eigenvalues, the rows of VT the
+// eigenvectors.
+func tql2(VT [][]float64, d, e []float64) {
+	n := len(d)
+	for i := 1; i < n; i++ {
+		e[i-1] = e[i]
+	}
+	e[n-1] = 0
+	var f, tst1 float64
+	const eps = 0x1p-52
+	for l := range n {
+		tst1 = max(tst1, math.Abs(d[l])+math.Abs(e[l]))
+		m := l
+		for m < n-1 && math.Abs(e[m]) > eps*tst1 {
+			m++
+		}
+		if m > l {
+			for iter := 0; iter < 100; iter++ {
+				g := d[l]
+				p := (d[l+1] - g) / (2 * e[l])
+				r := math.Hypot(p, 1)
+				if p < 0 {
+					r = -r
+				}
+				d[l] = e[l] / (p + r)
+				d[l+1] = e[l] * (p + r)
+				dl1 := d[l+1]
+				h := g - d[l]
+				for i := l + 2; i < n; i++ {
+					d[i] -= h
+				}
+				f += h
+				p = d[m]
+				c, c2, c3 := 1.0, 1.0, 1.0
+				el1 := e[l+1]
+				var s, s2 float64
+				for i := m - 1; i >= l; i-- {
+					c3, c2, s2 = c2, c, s
+					g = c * e[i]
+					h = c * p
+					r = math.Hypot(p, e[i])
+					e[i+1] = s * r
+					s = e[i] / r
+					c = p / r
+					p = c*d[i] - s*g
+					d[i+1] = h + s*(c*g+s*d[i])
+					a, b := VT[i], VT[i+1]
+					for k := range n {
+						h = b[k]
+						b[k] = s*a[k] + c*h
+						a[k] = c*a[k] - s*h
+					}
+				}
+				p = -s * s2 * c3 * el1 * e[l] / dl1
+				e[l] = s * p
+				d[l] = c * p
+				if math.Abs(e[l]) <= eps*tst1 {
+					break
+				}
+			}
+		}
+		d[l] += f
+		e[l] = 0
+	}
 }
 
 // ExplainedRatio returns the share of the total variance every kept

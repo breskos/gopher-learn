@@ -70,11 +70,10 @@ func LBFGS(f Func, x0 []float64, cfg Config) (Result, error) {
 			alpha[i] = rho[i] * dot(s[i], d)
 			axpy(-alpha[i], y[i], d)
 		}
-		gamma := 1.0
+		// initial scaling of the inverse Hessian
+		gamma := 1 / math.Max(1, math.Sqrt(dot(g, g)))
 		if k := len(s) - 1; k >= 0 {
 			gamma = dot(s[k], y[k]) / dot(y[k], y[k])
-		} else {
-			gamma = 1 / math.Max(1, math.Sqrt(dot(g, g)))
 		}
 		for i := range d {
 			d[i] *= gamma

@@ -1,6 +1,17 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] Unreleased
+
+Classic models: fast, exact, deterministic baselines. See [docs/classic.md](docs/classic.md).
+
+### Added
+- **`linear`:** `FitRegression` (least squares with optional ridge, solved exactly by Cholesky) and `FitLogistic` (multinomial logistic regression with L2, minimized with L-BFGS). Both standardize internally and report coefficients in original units; `ProbabilitiesInto` predicts without allocating.
+- **`cluster`:** k-means with k-means++ starts, restarts and parallel, machine-independent assignment; `Silhouette` to choose the number of clusters.
+- **`pca`:** principal component analysis from the eigen decomposition of the covariance matrix (Householder and implicit QL) with standardization, whitening, a minimum explained variance, `Inverse` reconstruction and `TransformSet`.
+- `persist.SaveRegression`, `SaveLogistic`, `SaveKMeans`, `SavePCA` and their readers, validated and fuzz-tested.
+- Quality tests on the synthetic data: logistic regression 100 % on blobs and macro AUC 0.992 on imbalanced classes, linear regression R² 0.72 on Friedman #1 (network 0.94), k-means 100 % purity, PCA keeps the accuracy of 200 features with 20 components.
+
 ## [0.8.0] 2026-11-26
 
 Model selection and explainability. See [docs/selection.md](docs/selection.md) and [docs/explain.md](docs/explain.md).
