@@ -81,7 +81,10 @@ func TestRegressionSingular(t *testing.T) {
 	if y, _ := r.Predict([]float64{1.5, 1.5, 1}); math.Abs(y-4) > 1e-6 {
 		t.Fatalf("prediction %v, weights %v", y, r.Weights)
 	}
-	if math.Abs(r.Weights[0]-r.Weights[1]) > 1e-6 {
+	// the system is singular and only stabilized by a tiny ridge, so the
+	// split between the duplicates is exact only up to rounding (which
+	// differs between CPUs); their sum is what matters
+	if math.Abs(r.Weights[0]+r.Weights[1]-2) > 1e-9 || math.Abs(r.Weights[0]-r.Weights[1]) > 1e-4 {
 		t.Fatalf("duplicates should share the weight: %v", r.Weights)
 	}
 }
