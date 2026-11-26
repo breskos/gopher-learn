@@ -45,7 +45,7 @@ jobs:
         go: ["1.24", "stable"]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
@@ -84,7 +84,7 @@ jobs:
     name: fuzz (${{ matrix.target.name }})
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - run: go test -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=${{ github.event_name == 'schedule' && '3m' || '15s' }} ${{ matrix.target.pkg }}
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Test on 32-bit
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Compare benchmarks with the base branch
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - uses: golangci/golangci-lint-action@v9
