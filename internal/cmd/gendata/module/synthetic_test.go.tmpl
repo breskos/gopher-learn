@@ -50,7 +50,7 @@ func TestDatasets(t *testing.T) {
 						t.Fatalf("row %d: empty text", rows)
 					}
 				}
-				if d.Task == "regression" {
+				if d.Task == "regression" && !d.RawTarget {
 					v, err := strconv.ParseFloat(r.Target, 64)
 					if err != nil || v < 0 || v > 1 {
 						t.Fatalf("row %d: regression target %q not in [0, 1]", rows, r.Target)

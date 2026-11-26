@@ -14,6 +14,7 @@ Neural networks in pure Go, with no dependencies outside the standard library. F
 - Fast: batched training on all CPU cores with bit-identical results, allocation-free inference, and float32 models with a compact binary format for small devices
 - A training engine that decays the learning rate and keeps the best network according to a criterion of your choice
 - Online learning for streams: test-then-train evaluation, bounded memory and concept drift detection (ADWIN, Page-Hinkley)
+- A production online learning service: delayed feedback and corrections by event ID, experience replay, outlier filter, gradient clipping, guardrail with automatic rollback and lock-free live predictions
 - Encoders that turn strings and float vectors into feature vectors, including the hashing trick and TF-IDF for text streams
 - Rich evaluation: confusion matrix, precision, recall, F1, balanced accuracy, ROC-AUC, log loss, RMSE, R² and more
 - Classic models as fast, exact baselines: linear and logistic regression, k-means clustering and PCA
@@ -52,6 +53,20 @@ label, err := n.NewPredictor().Classify(reading) // no allocation
 
 A motor fault detector with 234 parameters is a 1 KB model file; the complete device program is 1.5 to 1.9 MB and classifies 1.5 million readings per second on one core of an M1. CI builds for ARMv7, RISC-V and WebAssembly and runs the tests on 32-bit.
 
+## Online learning in production
+
+Predict now, learn when the outcome is known, and never let bad feedback reach the live model ([guide](docs/service.md)):
+
+```go
+s, _ := service.New(net, nn.Classification, service.Config{Reference: trusted})
+
+p, _ := s.Predict(features)        // live answer + event ID, never waits for training
+// ... minutes or days later
+u, _ := s.Feedback(p.ID, "bought") // a second call with the same ID corrects the label
+```
+
+Feedback passes an outlier filter, trains a shadow copy together with a replay mini-batch and clipped gradients, and the shadow copy only goes live if it does as well as the live model on the reference set; otherwise it is rolled back. A concept drift raises the learning rate and a warning. The [example](examples/online-service) replays realistic event logs with late, wrong and corrupt feedback and a drift: after the drift the service is at 89.9 % accuracy, the frozen model at 63.7 %.
+
 ## Explainability
 
 Which inputs does a model rely on? `explain.Permutation` shuffles one feature at a time and measures how much worse the model gets ([guide](docs/explain.md)):
@@ -89,6 +104,7 @@ Requires Go 1.24 or newer.
 | [`learn`](learn) | Data sets and samples, CSV and LIBSVM loaders |
 | [`engine`](engine) | Batch training with learning rate decay and model selection |
 | [`online`](online) | Continuous training from a stream of samples |
+| [`service`](service) | Production online learning: delayed feedback, replay, guardrails, rollback |
 | [`drift`](drift) | Concept drift detection: ADWIN and Page-Hinkley |
 | [`evaluation`](evaluation) | Metrics and reports |
 | [`linear`](linear) | Linear (ridge) and logistic regression |
@@ -216,6 +232,7 @@ label, err := net.Classify([]float64{0, 1})
 - [Embedded systems](docs/embedded.md)
 - [Engine](docs/engine.md)
 - [Online learning](docs/online.md)
+- [Production online learning](docs/service.md)
 - [Evaluation](docs/evaluation.md)
 - [Encoders](docs/encoders.md)
 - [Examples](examples), with data in [gopher-learn-data](https://github.com/breskos/gopher-learn-data)

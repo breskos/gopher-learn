@@ -17,7 +17,7 @@ Until v1.0.0 minor versions may change the API; every breaking change is listed 
 | v0.7.0 | Performance and robustness | released |
 | v0.8.0 | Model selection and explainability | released |
 | v0.9.0 | Classic models | released |
-| v0.10.0 | Production online learning | planned |
+| v0.10.0 | Production online learning | in progress |
 | v0.11.0 | Gradient-boosted trees | planned |
 | v0.12.0 | Interop and tooling | planned |
 | v0.13.0 | WebAssembly and TinyGo | planned |
@@ -84,26 +84,28 @@ Strong, fast baselines that every tabular project needs.
 
 Goal: a stable online learning service that works with delayed feedback and later corrections of labels and values, and protects the live model against noisy data and degradation.
 
+Implemented in the [`service`](service) package, see [docs/service.md](docs/service.md).
+
 Data flow: input → `event_id` and live prediction → park the input vector (ID store) → later feedback or correction by `event_id` → outlier filter and replay buffer → online update (with clipping and drift check) → guardrail test → live swap or rollback.
 
 ### Functional requirements
 
-| ID | Requirement | Description | Today |
+| ID | Requirement | Description | Status |
 | --- | --- | --- | --- |
-| FR-01 | ID-based delayed feedback | Every prediction gets a unique `event_id`. Its input vector is stored temporarily until the true label or regression value arrives. | new |
-| FR-02 | Later correction | Labels or values already given can be overwritten by `event_id`, which triggers another update. | new |
-| FR-03 | Experience replay | A sliding window (ring buffer) of past labeled samples, addressable by `event_id`. Every online update trains the new or corrected sample together with a sample from the buffer to prevent catastrophic forgetting. | partly: bounded memory (`online.Window`, `online.Reservoir`), but without IDs, and the quick update trains the new sample alone |
-| FR-04 | Concept drift detection | Continuous monitoring of the prediction error. On significant changes the learning rate is adapted automatically or a warning is raised. | partly: ADWIN and Page-Hinkley with `OnDrift` and forgetting; adapting the learning rate is missing |
-| FR-05 | Exploration vs. exploitation (optional, for agents) | Controlled trying of alternative actions (e.g. ε-greedy) to avoid dead ends caused by one-sided feedback. | new |
+| FR-01 | ID-based delayed feedback | Every prediction gets a unique `event_id`. Its input vector is stored temporarily until the true label or regression value arrives. | done: `Predict` / `PredictID` and `Feedback`, with TTL and capacity |
+| FR-02 | Later correction | Labels or values already given can be overwritten by `event_id`, which triggers another update. | done: feedback for a labeled event replaces it and trains again |
+| FR-03 | Experience replay | A sliding window (ring buffer) of past labeled samples, addressable by `event_id`. Every online update trains the new or corrected sample together with a sample from the buffer to prevent catastrophic forgetting. | done: ring buffer by event ID, 15 replay samples per update |
+| FR-04 | Concept drift detection | Continuous monitoring of the prediction error. On significant changes the learning rate is adapted automatically or a warning is raised. | done: ADWIN / Page-Hinkley, `OnDrift` warning, learning-rate boost, replay forgets the old concept |
+| FR-05 | Exploration vs. exploitation (optional, for agents) | Controlled trying of alternative actions (e.g. ε-greedy) to avoid dead ends caused by one-sided feedback. | done: `Epsilon` for classification |
 
 ### Non-functional requirements and guardrails
 
-| ID | Requirement | Description | Today |
+| ID | Requirement | Description | Status |
 | --- | --- | --- | --- |
-| NFR-01 | Outlier filter and plausibility | Incoming feedback is checked for outliers and valid ranges before training, so single corrupt values cannot destroy the network. | partly: NaN and infinite values are rejected; ranges and robust outlier detection are missing. (Regression no longer needs targets in [0, 1]: linear outputs and target scaling exist since v0.5.) |
-| NFR-02 | Gradient clipping / step limit | The largest weight change per update is limited. | partly: `nn.Step.ClipNorm` and non-finite steps are skipped, but the online quick updates do not clip yet |
-| NFR-03 | Snapshot versioning and auto-rollback | Model weights are persisted regularly. Before going live (or periodically) the network is checked against a stable reference set; if the quality drops, it is rolled back automatically. | partly: atomic `persist` saves; versioned snapshots, reference checks and rollback are missing |
-| NFR-04 | Decoupled inference and training | Live predictions must not be blocked or see inconsistent weights while updates run (shadow update and atomic model swap). | new: prediction is safe from many goroutines, but not while the same network trains |
+| NFR-01 | Outlier filter and plausibility | Incoming feedback is checked for outliers and valid ranges before training, so single corrupt values cannot destroy the network. | done: ranges, robust z-score, custom `Check`; regression needs no targets in [0, 1] (linear outputs and target scaling exist since v0.5) |
+| NFR-02 | Gradient clipping / step limit | The largest weight change per update is limited. | done: `ClipNorm` on every update, non-finite steps skipped |
+| NFR-03 | Snapshot versioning and auto-rollback | Model weights are persisted regularly. Before going live (or periodically) the network is checked against a stable reference set; if the quality drops, it is rolled back automatically. | done: versions with history, reference set or rolling holdout, auto-rollback, `SnapshotDir` |
+| NFR-04 | Decoupled inference and training | Live predictions must not be blocked or see inconsistent weights while updates run (shadow update and atomic model swap). | done: live version behind an atomic pointer, training on a shadow copy |
 
 ## v0.11.0 — Gradient-boosted trees
 

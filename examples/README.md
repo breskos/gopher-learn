@@ -37,6 +37,10 @@ It shows you how to apply this functionality.
 
 Using the data from the Sonar example, this example shows you how to use it in online mode.
 
+## Online service (production online learning)
+
+Trains a model on the history of an event log, then runs it as a live service with delayed, wrong and corrupt feedback, corrections and a concept drift, and compares it with the frozen model. Also serves the model over HTTP. Needs no data files. See [online-service](online-service) and [docs/service.md](../docs/service.md).
+
 ## Embedded (float32 model)
 
 Trains a motor fault detector on a computer, exports it as a 1 KB float32 model and runs it on an embedded device with a 1.5 to 1.9 MB program. See [embedded](embedded) and [docs/embedded.md](../docs/embedded.md).
