@@ -36,6 +36,22 @@ func FuzzRead(f *testing.F) {
 		func(b *bytes.Buffer) error { return WriteEncoder(b, enc) },
 		func(b *bytes.Buffer) error { return WriteScaler(b, sc) },
 		func(b *bytes.Buffer) error { return WriteModel(b, m) },
+		func(b *bytes.Buffer) error {
+			_, err := b.WriteString(`{"kind":"pca","version":2,"data":{"mean":[1,2],"components":[[1,0]],"variance":[1],"total_variance":1,"whiten":true}}`)
+			return err
+		},
+		func(b *bytes.Buffer) error {
+			_, err := b.WriteString(`{"kind":"kmeans","version":2,"data":{"centroids":[[1,2],[3,4]]}}`)
+			return err
+		},
+		func(b *bytes.Buffer) error {
+			_, err := b.WriteString(`{"kind":"logistic-regression","version":2,"data":{"labels":["a","b"],"weights":[[1],[2]],"biases":[0,1]}}`)
+			return err
+		},
+		func(b *bytes.Buffer) error {
+			_, err := b.WriteString(`{"kind":"linear-regression","version":2,"data":{"weights":[1,2],"bias":3}}`)
+			return err
+		},
 	} {
 		var b bytes.Buffer
 		if err := write(&b); err != nil {
@@ -78,6 +94,21 @@ func FuzzRead(f *testing.F) {
 		}
 		if s, err := ReadScaler(r()); err == nil {
 			_, _ = s.Transform(make([]float64, s.Size()))
+		}
+		if m, err := ReadRegression(r()); err == nil {
+			_, _ = m.Predict(make([]float64, len(m.Weights)))
+		}
+		if m, err := ReadLogistic(r()); err == nil {
+			_, _ = m.Classify(make([]float64, len(m.Weights[0])))
+		}
+		if m, err := ReadKMeans(r()); err == nil {
+			_, _ = m.Predict(make([]float64, len(m.Centroids[0])))
+		}
+		if m, err := ReadPCA(r()); err == nil {
+			z, err := m.Transform(make([]float64, len(m.Mean)))
+			if err == nil {
+				_, _ = m.Inverse(z)
+			}
 		}
 		if m, err := ReadModel(r()); err == nil {
 			rec := model.Record{}
